@@ -1033,3 +1033,5 @@ config TOUCHSCREEN_GT9XX
 source "drivers/input/touchscreen/gt9xx/Kconfig"
 
 endif
+
+source "drivers/input/touchscreen/s3408/Kconfig"
