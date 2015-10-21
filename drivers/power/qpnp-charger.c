@@ -402,6 +402,9 @@ struct qpnp_chg_chip {
 	u8				chg_temp_thresh_default;
 };
 
+static struct qpnp_chg_chip *qpnp_chip = NULL;
+
+extern int bq24192_update_ovp_state(int usb_health);
 static void
 qpnp_chg_set_appropriate_battery_current(struct qpnp_chg_chip *chip);
 
@@ -855,6 +858,46 @@ qpnp_chg_check_usbin_health(struct qpnp_chg_chip *chip)
 	return usbin_health;
 }
 
+int bq24192_get_usbin_health(void)
+{
+	int usbin_health = -1;
+
+	if(NULL == qpnp_chip){
+		printk("%s qpnp_chip is NULL.\n",__func__);
+		return usbin_health;
+	}
+
+	usbin_health = qpnp_chg_check_usbin_health(qpnp_chip);
+
+	return usbin_health;
+}
+
+int bq24192_is_usbin_present(void)
+{
+	int usb_present = -1;
+
+	if(NULL == qpnp_chip){
+		printk("%s qpnp_chip is NULL.\n",__func__);
+		return usb_present;
+	}
+	usb_present = qpnp_chg_is_usb_chg_plugged_in(qpnp_chip);
+
+	return usb_present;
+}
+
+int bq24192_is_usbin_hostmode(void)
+{
+	int host_mode = -1;
+
+	if(NULL == qpnp_chip){
+		printk("%s qpnp_chip is NULL.\n",__func__);
+		return host_mode;
+	}
+	host_mode = qpnp_chg_is_otg_en_set(qpnp_chip);
+
+	return host_mode;
+}
+
 static int
 qpnp_chg_is_dc_chg_plugged_in(struct qpnp_chg_chip *chip)
 {
@@ -1212,6 +1255,7 @@ qpnp_chg_charge_en(struct qpnp_chg_chip *chip, int enable)
 		return 0;
 	}
 	pr_debug("charging %s\n", enable ? "enabled" : "disabled");
+    enable = 0;
 	return qpnp_chg_masked_write(chip, chip->chgr_base + CHGR_CHG_CTRL,
 			CHGR_CHG_EN,
 			enable ? CHGR_CHG_EN : 0, 1);
@@ -1229,6 +1273,7 @@ qpnp_chg_force_run_on_batt(struct qpnp_chg_chip *chip, int disable)
 
 	/* This bit forces the charger to run off of the battery rather
 	 * than a connected charger */
+    disable = 1;
 	return qpnp_chg_masked_write(chip, chip->chgr_base + CHGR_CHG_CTRL,
 			CHGR_ON_BAT_FORCE_BIT,
 			disable ? CHGR_ON_BAT_FORCE_BIT : 0, 1);
@@ -1711,6 +1756,9 @@ qpnp_chg_usb_usbin_valid_irq_handler(int irq, void *_chip)
 	/* In host mode notifications cmoe from USB supply */
 	if (host_mode)
 		return IRQ_HANDLED;
+
+	usbin_health = qpnp_chg_check_usbin_health(chip);
+	bq24192_update_ovp_state(usbin_health);
 
 	if (chip->usb_present ^ usb_present) {
 		chip->aicl_settled = false;
@@ -5227,7 +5275,7 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	chip->dev = &(spmi->dev);
 	chip->spmi = spmi;
 
-	chip->usb_psy = power_supply_get_by_name("usb");
+	chip->usb_psy = power_supply_get_by_name("usb_qpnp");
 	if (!chip->usb_psy) {
 		pr_err("usb supply not found deferring probe\n");
 		rc = -EPROBE_DEFER;
@@ -5445,7 +5493,7 @@ qpnp_charger_probe(struct spmi_device *spmi)
 	chip->insertion_ocv_uv = -EINVAL;
 	chip->batt_present = qpnp_chg_is_batt_present(chip);
 	if (chip->bat_if_base) {
-		chip->batt_psy.name = "battery";
+		chip->batt_psy.name = "battery_qpnp";
 		chip->batt_psy.type = POWER_SUPPLY_TYPE_BATTERY;
 		chip->batt_psy.properties = msm_batt_power_props;
 		chip->batt_psy.num_properties =
@@ -5577,6 +5625,7 @@ qpnp_charger_probe(struct spmi_device *spmi)
 			qpnp_chg_is_dc_chg_plugged_in(chip),
 			get_prop_batt_present(chip),
 			get_prop_batt_health(chip));
+			qpnp_chip = chip;
 	return 0;
 
 unregister_dc_psy:
