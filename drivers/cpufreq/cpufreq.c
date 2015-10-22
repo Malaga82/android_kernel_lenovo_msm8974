@@ -32,6 +32,9 @@
 
 #include <trace/events/power.h>
 
+wait_queue_head_t display_qos_load;
+atomic_t commits_qos_param;
+
 /**
  * The "cpufreq driver" - the arch- or hardware-dependent low
  * level driver of CPUFreq support, and its spinlock. This lock
@@ -2008,6 +2011,8 @@ static int __init cpufreq_core_init(void)
 	cpufreq_global_kobject = kobject_create_and_add("cpufreq", &cpu_subsys.dev_root->kobj);
 	BUG_ON(!cpufreq_global_kobject);
 	register_syscore_ops(&cpufreq_syscore_ops);
+	init_waitqueue_head(&display_qos_load);
+	atomic_set(&commits_qos_param, 0);
 
 	return 0;
 }
