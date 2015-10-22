@@ -270,8 +270,12 @@ struct mdss_dsi_ctrl_pdata {
 	int panel_mode;
 	int irq_cnt;
 	int rst_gpio;
+	int te_irq;
 	int disp_en_gpio;
 	int disp_te_gpio;
+	int disp_vsp_gpio;
+	int disp_vsn_gpio;
+	int bl_outdoor_gpio;
 	int mode_gpio;
 	int disp_te_gpio_requested;
 	int bklt_ctrl;	/* backlight ctrl */
