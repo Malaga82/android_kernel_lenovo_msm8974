@@ -123,6 +123,40 @@ static void enable_emergency_dload_mode(void)
 	}
 }
 
+static int emergent_restart;
+extern int is_testmode;
+extern int qpnp_pon_set_emergent_restart_mode(void);
+static int emergent_restart_set(const char *val, struct kernel_param *kp)
+{
+	int ret;
+	int old_val = emergent_restart;
+
+	/* it has been set the emergent_restart mode */
+	if (emergent_restart)
+		return 0;
+
+	ret = param_set_int(val, kp);
+
+	if (ret)
+		return ret;
+
+	/* If emergent_restart is not zero or one, ignore. */
+	if (emergent_restart >> 1) {
+		emergent_restart = old_val;
+		return -EINVAL;
+	}
+
+	if (!is_testmode)
+		qpnp_pon_set_emergent_restart_mode();
+	else
+		pr_info("%s:it's in testmode,ignore this setting\n",__func__);
+
+	return 0;
+}
+
+module_param_call(emergent_restart, emergent_restart_set, param_get_int,
+			&emergent_restart, 0644);
+
 static int dload_set(const char *val, struct kernel_param *kp)
 {
 	int ret;
@@ -178,12 +212,14 @@ static void halt_spmi_pmic_arbiter(void)
 	}
 }
 
+void qpnp_poweroff_last_reg(int poweroff);
 static void __msm_power_off(int lower_pshold)
 {
 	printk(KERN_CRIT "Powering off the SoC\n");
 #ifdef CONFIG_MSM_DLOAD_MODE
 	set_dload_mode(0);
 #endif
+	qpnp_poweroff_last_reg(1);
 	pm8xxx_reset_pwr_off(0);
 	qpnp_pon_system_pwr_off(PON_POWER_OFF_SHUTDOWN);
 
@@ -248,6 +284,8 @@ static irqreturn_t resout_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+extern void mrd_unset_miniramdump(void);
+
 static void msm_restart_prepare(const char *cmd)
 {
 #ifdef CONFIG_MSM_DLOAD_MODE
@@ -258,9 +296,16 @@ static void msm_restart_prepare(const char *cmd)
 	/* Write download mode flags if we're panic'ing */
 	set_dload_mode(in_panic);
 
+	qpnp_poweroff_last_reg(0);
+	pr_err("restart:restart_mode=%d,in_panic=%d,download_mode=%d\n",restart_mode,in_panic,download_mode);
 	/* Write download mode flags if restart_mode says so */
-	if (restart_mode == RESTART_DLOAD)
+	if (restart_mode == RESTART_DLOAD) {
+#ifdef CONFIG_LENOVO_DEBUG_MRD
+		//unset mrd feature
+		mrd_unset_miniramdump();
+#endif
 		set_dload_mode(1);
+	}
 
 	/* Kill download mode if master-kill switch is set */
 	if (!download_mode)
@@ -273,14 +318,16 @@ static void msm_restart_prepare(const char *cmd)
 	if (get_dload_mode() || (cmd != NULL && cmd[0] != '\0'))
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 	else
-		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
+		qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
 			__raw_writel(0x77665500, restart_reason);
 		} else if (!strncmp(cmd, "recovery", 8)) {
 			__raw_writel(0x77665502, restart_reason);
-		} else if (!strcmp(cmd, "rtc")) {
+		} else if (!strncmp(cmd, "testmode", 8)) {
+                        __raw_writel(0x77665504, restart_reason);
+                } else if (!strcmp(cmd, "rtc")) {
 			__raw_writel(0x77665503, restart_reason);
 		} else if (!strncmp(cmd, "oem-", 4)) {
 			unsigned long code;
@@ -288,6 +335,12 @@ static void msm_restart_prepare(const char *cmd)
 			__raw_writel(0x6f656d00 | code, restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
+		} else if (!strncmp(cmd, "dloadmode", 9)) {
+#ifdef CONFIG_LENOVO_DEBUG_MRD
+			//unset mrd feature
+			mrd_unset_miniramdump();
+#endif
+			set_dload_mode(1);
 		} else {
 			__raw_writel(0x77665501, restart_reason);
 		}
@@ -351,6 +404,34 @@ static int __init msm_pmic_restart_init(void)
 
 late_initcall(msm_pmic_restart_init);
 
+#define FIX_IMEM_CONT_REBOOT_COUNT_ADDR 0x20
+int imem_read(int offset)
+{
+	int val=0;
+	void* imem_addr = MSM_IMEM_BASE + offset;
+	printk("%s: MSM_IMEM_BASE=%p,offset=0x%x, imem_addr=%p\n",__func__,MSM_IMEM_BASE,offset,imem_addr);
+	val=__raw_readl(imem_addr);
+	mb();
+	return val;
+}
+
+void imem_write(int offset,unsigned int val)
+{
+	void* imem_addr = MSM_IMEM_BASE + offset;
+	printk("%s: MSM_IMEM_BASE=%p,offset=0x%x, imem_addr=%p,val=0x%x\n",__func__,MSM_IMEM_BASE,offset,imem_addr,val);
+	__raw_writel(val, imem_addr);
+	mb();
+}
+
+static void imem_init(void)
+{
+	unsigned int val=(unsigned int)imem_read(FIX_IMEM_CONT_REBOOT_COUNT_ADDR);
+	printk("%s:initial imem offset 0x%x value: 0x%x\n",__func__,FIX_IMEM_CONT_REBOOT_COUNT_ADDR,val);
+	val++;
+	imem_write(FIX_IMEM_CONT_REBOOT_COUNT_ADDR , val);
+	printk("%s:write back imem offset 0x%x value: 0x%x\n",__func__,FIX_IMEM_CONT_REBOOT_COUNT_ADDR,val);
+}
+
 static int __init msm_restart_init(void)
 {
 #ifdef CONFIG_MSM_DLOAD_MODE
@@ -367,6 +448,7 @@ static int __init msm_restart_init(void)
 	if (scm_is_call_available(SCM_SVC_PWR, SCM_IO_DISABLE_PMIC_ARBITER) > 0)
 		scm_pmic_arbiter_disable_supported = true;
 
+	imem_init();
 	return 0;
 }
 early_initcall(msm_restart_init);

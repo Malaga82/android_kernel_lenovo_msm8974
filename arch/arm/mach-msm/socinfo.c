@@ -493,6 +493,46 @@ uint32_t socinfo_get_raw_id(void)
 		: 0;
 }
 
+static uint32_t ddr_id;
+static void __init soc_ddrinfo_init(void)
+{
+	struct smem_ram_ptn {
+		char name[16];
+		unsigned start;
+		unsigned size;
+		unsigned attr;
+		unsigned category;
+		unsigned domain;
+		unsigned type;
+		unsigned reserved2, reserved3, reserved4, reserved5;
+	} __attribute__ ((__packed__));
+	struct smem_ram_ptable {
+		unsigned magic[2];
+		unsigned version;
+		unsigned reserved1;
+		unsigned len;
+		struct smem_ram_ptn parts[32];
+		unsigned buf;
+	} __attribute__ ((__packed__));
+
+	struct smem_ram_ptable *ram_ptable;
+
+	ram_ptable = smem_alloc(SMEM_USABLE_RAM_PARTITION_TABLE,
+				sizeof(struct smem_ram_ptable));
+
+	if (!ram_ptable) {
+		pr_err("%s:Could not read ram partition table\n",__func__);
+		return ;
+	}
+
+	pr_info("%s: ddr_id : %d\n",__func__, ram_ptable->reserved1);
+	ddr_id=ram_ptable->reserved1;
+}
+
+uint32_t socinfo_get_ddr_id(void) {
+	return ddr_id;
+}
+
 uint32_t socinfo_get_raw_version(void)
 {
 	return socinfo ?
@@ -629,6 +669,19 @@ socinfo_show_raw_id(struct sys_device *dev,
 	}
 
 	return snprintf(buf, PAGE_SIZE, "%u\n", socinfo_get_raw_id());
+}
+
+static ssize_t
+socinfo_show_ddr_id(struct sys_device *dev,
+		    struct sysdev_attribute *attr,
+		    char *buf)
+{
+	if (!socinfo) {
+		pr_err("%s: No socinfo found!\n", __func__);
+		return 0;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", socinfo_get_ddr_id());
 }
 
 static ssize_t
@@ -1023,6 +1076,7 @@ static struct sysdev_attribute socinfo_v1_files[] = {
 	_SYSDEV_ATTR(id, 0444, socinfo_show_id, NULL),
 	_SYSDEV_ATTR(version, 0444, socinfo_show_version, NULL),
 	_SYSDEV_ATTR(build_id, 0444, socinfo_show_build_id, NULL),
+	_SYSDEV_ATTR(ddr_id, 0444, socinfo_show_ddr_id, NULL),
 };
 
 static struct sysdev_attribute socinfo_v2_files[] = {
@@ -1523,6 +1577,7 @@ int __init socinfo_init(void)
 	socinfo_print();
 	arch_read_hardware_id = msm_read_hardware_id;
 
+	soc_ddrinfo_init();
 	return 0;
 }
 

@@ -2436,6 +2436,14 @@ config MSM_MEMORY_DUMP
 		of deadlocks or cpu hangs these dump regions are captured to
 		give a snapshot of the system at the time of the crash.
 
+config LENOVO_DEBUG_MRD
+	bool "Lenovo Mini Ramdump Support"
+	help
+		mini ramdump is a very small memory collect that define by app core driver,
+		modem, rpm or other process, such as the dmesg log,android logcat log,f3 trace
+		buffer,ocimem,rpm ram, etc.these info will be saved in a mrd partition after
+		the system enter into dloadmode due to panic or other critical reboot reason.
+
 config MSM_DLOAD_MODE
 	bool "Enable download mode on crashes"
 	default n
@@ -3035,6 +3043,11 @@ config WALL_CLK_SYSFS
 	help
 	 Support the wallclk directory in sysfs filesystem to enable the
 	 wall clock simulation and read the current SFN.
+
+config LENOVO_DEBUG_RKM
+	bool "Configure Replay Kernel Message feature for debug"
+	help
+	 RKM can replay last kernel dmesglog info after reboot.
 
 config KRAIT_REGULATOR
 	bool "Support Kraits powered via ganged regulators in the pmic"

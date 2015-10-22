@@ -7,6 +7,11 @@ endif
 obj-y += clock.o clock-voter.o clock-dummy.o clock-generic.o
 obj-y += modem_notifier.o
 obj-$(CONFIG_USE_OF) += board-dt.o
+
+# Add user defined sysfs
+obj-y += user_sysfs_private.o
+obj-y += user_sysfs_debug.o
+
 obj-$(CONFIG_DEBUG_FS) += nohlt.o clock-debug.o
 obj-$(CONFIG_KEXEC) += msm_kexec.o
 
@@ -212,6 +217,8 @@ obj-$(CONFIG_MSM_WATCHDOG) += msm_watchdog.o
 obj-$(CONFIG_MSM_WATCHDOG) += msm_watchdog_asm.o
 obj-$(CONFIG_MSM_WATCHDOG_V2) += msm_watchdog_v2.o
 obj-$(CONFIG_MSM_MEMORY_DUMP) += msm_memory_dump.o
+obj-$(CONFIG_LENOVO_DEBUG_RKM) += le_rkm.o
+obj-$(CONFIG_LENOVO_DEBUG_MRD) += le_mrd.o
 obj-$(CONFIG_MACH_MSM8X60_SURF) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_FFA) += board-msm8x60.o
 obj-$(CONFIG_MACH_MSM8X60_FLUID) += board-msm8x60.o
@@ -404,6 +411,8 @@ obj-$(CONFIG_DEBUG_FS) += msm_cpr-debug.o
 endif
 obj-$(CONFIG_MSM_FIQ) += msm7k_fiq.o
 obj-$(CONFIG_MSM_FIQ) += msm7k_fiq_handler.o
+
+obj-y += lephone_nv.o
 
 obj-$(CONFIG_MEMORY_HOLE_CARVEOUT) +=  msm_mem_hole.o
 

@@ -45,6 +45,25 @@ void modem_queue_smsm_init_notify(void)
 }
 EXPORT_SYMBOL(modem_queue_smsm_init_notify);
 
+//yangjq, 2014-8-14, Allocate share memory for smem_dmesg after modem's initialization, START
+static void notify_work_smsm_smdinit(struct work_struct *work)
+{
+	modem_notify(0, MODEM_NOTIFIER_SMSM_SMDINIT);
+}
+static DECLARE_WORK(modem_notifier_smsm_smdinit_work, &notify_work_smsm_smdinit);
+
+void modem_queue_smsm_smdinit_notify(void)
+{
+	int ret;
+
+	ret = queue_work(modem_notifier_wq, &modem_notifier_smsm_smdinit_work);
+
+	if (!ret)
+		printk(KERN_ERR "%s\n", __func__);
+}
+EXPORT_SYMBOL(modem_queue_smsm_smdinit_notify);
+//yangjq, 2014-8-14, Allocate share memory for smem_dmesg after modem's initialization, END
+
 static void notify_work_start_reset(struct work_struct *work)
 {
 	modem_notify(0, MODEM_NOTIFIER_START_RESET);
@@ -162,6 +181,8 @@ static void modem_notifier_debugfs_init(void) {}
 #endif
 
 #if defined(DEBUG)
+//yangjq, 2014-8-14, Allocate share memory for smem_dmesg after modem's initialization
+extern int _smem_dmesg_init(void);
 static int modem_notifier_test_call(struct notifier_block *this,
 				  unsigned long code,
 				  void *_cmd)
@@ -176,6 +197,12 @@ static int modem_notifier_test_call(struct notifier_block *this,
 	case MODEM_NOTIFIER_SMSM_INIT:
 		printk(KERN_ERR "Notify: smsm init\n");
 		break;
+	//yangjq, 2014-8-14, Allocate share memory for smem_dmesg after modem's initialization, START
+	case MODEM_NOTIFIER_SMSM_SMDINIT:
+		printk(KERN_ERR "Notify: smsm smdinit\n");
+		_smem_dmesg_init();
+		break;
+	//yangjq, 2014-8-14, Allocate share memory for smem_dmesg after modem's initialization, END
 	default:
 		printk(KERN_ERR "Notify: general\n");
 		break;
