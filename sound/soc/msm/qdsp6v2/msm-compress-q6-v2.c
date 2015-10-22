@@ -95,6 +95,7 @@ struct msm_compr_pdata {
 	struct msm_compr_audio_effects *audio_effects[MSM_FRONTEND_DAI_MAX];
 	bool use_dsp_gapless_mode;
 	struct msm_compr_dec_params *dec_params[MSM_FRONTEND_DAI_MAX];
+	bool HighResampler;
 };
 
 struct msm_compr_audio {
@@ -160,7 +161,7 @@ struct msm_compr_audio_effects {
 struct msm_compr_dec_params {
 	struct snd_dec_ddp ddp_params;
 };
-
+extern int q6asm_set_High_Resampler(struct audio_client *ac, bool HR_Flag);
 static int msm_compr_set_volume(struct snd_compr_stream *cstream,
 				uint32_t volume_l, uint32_t volume_r)
 {
@@ -1872,6 +1873,7 @@ static int msm_compr_probe(struct snd_soc_platform *platform)
 		pdata->audio_effects[i] = NULL;
 		pdata->dec_params[i] = NULL;
 		pdata->cstream[i] = NULL;
+		pdata->HighResampler = false;
 	}
 
 	/*
@@ -1913,6 +1915,134 @@ static int msm_compr_dec_params_info(struct snd_kcontrol *kcontrol,
 	uinfo->value.integer.max = 0xFFFFFFFF;
 	return 0;
 }
+
+static int msm_compr_High_Resampler_info(struct snd_kcontrol *kcontrol,
+				 struct snd_ctl_elem_info *uinfo)
+{
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_BOOLEAN;
+	uinfo->count = 1;
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = 1;
+	return 0;
+}
+
+static int msm_compr_set_High_Resampler(struct snd_compr_stream *cstream,
+				bool HR_Flag)
+{
+	struct msm_compr_audio *prtd;
+	int rc = 0;
+
+	pr_debug("%s: HR_Flag %d\n",__func__, HR_Flag);
+
+	prtd = cstream->runtime->private_data;
+	if (prtd && prtd->audio_client) {
+		pr_debug("%s: call q6asm_set_High_Resampler\n", __func__);
+		rc = q6asm_set_High_Resampler(prtd->audio_client, HR_Flag);
+		if (rc < 0) {
+			pr_err("%s: Send High_Resampler command failed rc=%d\n",
+				__func__, rc);
+		}
+	}
+
+	return rc;
+}
+
+
+static int msm_compr_High_Resampler_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_platform *platform = snd_kcontrol_chip(kcontrol);
+	unsigned long fe_id = kcontrol->private_value;
+	struct msm_compr_pdata *pdata = (struct msm_compr_pdata *)
+			snd_soc_platform_get_drvdata(platform);
+	struct snd_compr_stream *cstream = NULL;
+	bool HR_flag = false;
+
+	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
+		pr_err("%s Received out of bounds fe_id %lu\n",
+			__func__, fe_id);
+		return -EINVAL;
+	}
+
+	cstream = pdata->cstream[fe_id];
+
+	HR_flag = ucontrol->value.integer.value[0];
+	pdata->HighResampler = HR_flag;
+
+	pr_debug("%s: fe_id %lu HR_flag %d\n",
+		 __func__, fe_id, HR_flag);
+	if (cstream)
+		msm_compr_set_High_Resampler(cstream, HR_flag);
+	return 0;
+}
+
+static int msm_compr_High_Resampler_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_platform *platform = snd_kcontrol_chip(kcontrol);
+	unsigned long fe_id = kcontrol->private_value;
+
+	struct msm_compr_pdata *pdata =
+		snd_soc_platform_get_drvdata(platform);
+	bool HR_flag = false;
+
+	if (fe_id >= MSM_FRONTEND_DAI_MAX) {
+		pr_err("%s Received out of bound fe_id %lu\n", __func__, fe_id);
+		return -EINVAL;
+	}
+
+	HR_flag = pdata->HighResampler;
+	pr_debug("%s: fe_id %lu, HR_flag %d\n", __func__, fe_id, HR_flag);
+	ucontrol->value.integer.value[0] = HR_flag;
+
+	return 0;
+}
+
+static int msm_compr_add_High_Resampler_control(struct snd_soc_pcm_runtime *rtd)
+{
+	const char *mixer_ctl_name = "Compress Playback";
+	const char *deviceNo       = "NN";
+	const char *suffix         = "HighResampler";
+	char *mixer_str = NULL;
+	int ctl_len;
+	struct snd_kcontrol_new fe_HighResampler_control[1] = {
+		{
+		.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+		.name = "?",
+		.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+			  SNDRV_CTL_ELEM_ACCESS_READWRITE,
+		.info = msm_compr_High_Resampler_info,
+		.get = msm_compr_High_Resampler_get,
+		.put = msm_compr_High_Resampler_put,
+		.private_value = 0,
+		}
+	};
+
+	if (!rtd) {
+		pr_err("%s NULL rtd\n", __func__);
+		return 0;
+	}
+	pr_debug("%s: added new compr FE with name %s, id %d, cpu dai %s, device no %d\n",
+		 __func__, rtd->dai_link->name, rtd->dai_link->be_id,
+		 rtd->dai_link->cpu_dai_name, rtd->pcm->device);
+	ctl_len = strlen(mixer_ctl_name) + 1 + strlen(deviceNo) + 1 +
+		  strlen(suffix) + 1;
+	mixer_str = kzalloc(ctl_len, GFP_KERNEL);
+	if (!mixer_str) {
+		pr_err("failed to allocate mixer ctrl str of len %d", ctl_len);
+		return 0;
+	}
+	snprintf(mixer_str, ctl_len, "%s %d %s", mixer_ctl_name,
+		 rtd->pcm->device, suffix);
+	fe_HighResampler_control[0].name = mixer_str;
+	fe_HighResampler_control[0].private_value = rtd->dai_link->be_id;
+	pr_debug("Registering new mixer ctl %s", mixer_str);
+	snd_soc_add_platform_controls(rtd->platform, fe_HighResampler_control,
+				      ARRAY_SIZE(fe_HighResampler_control));
+	kfree(mixer_str);
+	return 0;
+}
+
 
 static int msm_compr_add_volume_control(struct snd_soc_pcm_runtime *rtd)
 {
@@ -2106,6 +2236,12 @@ static int msm_compr_new(struct snd_soc_pcm_runtime *rtd)
 	if (rc)
 		pr_err("%s: Could not add Compr Dec runtime params Control\n",
 			__func__);
+
+	rc = msm_compr_add_High_Resampler_control(rtd);
+	if (rc)
+		pr_err("%s: Could not add High Resampler Control\n",
+			__func__);
+
 	return 0;
 }
 
