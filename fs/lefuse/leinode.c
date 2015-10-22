@@ -30,24 +30,24 @@ MODULE_DESCRIPTION("Filesystem in Userspace");
 MODULE_LICENSE("GPL");
 
 static struct kmem_cache *fuse_inode_cachep;
-struct list_head fuse_conn_list;
-DEFINE_MUTEX(fuse_mutex);
+struct list_head lefuse_conn_list;
+DEFINE_MUTEX(lefuse_mutex);
 
 static int set_global_limit(const char *val, struct kernel_param *kp);
 
-unsigned max_user_bgreq;
-module_param_call(max_user_bgreq, set_global_limit, param_get_uint,
-		  &max_user_bgreq, 0644);
-__MODULE_PARM_TYPE(max_user_bgreq, "uint");
-MODULE_PARM_DESC(max_user_bgreq,
+unsigned lemax_user_bgreq;
+module_param_call(lemax_user_bgreq, set_global_limit, param_get_uint,
+		  &lemax_user_bgreq, 0644);
+__MODULE_PARM_TYPE(lemax_user_bgreq, "uint");
+MODULE_PARM_DESC(lemax_user_bgreq,
  "Global limit for the maximum number of backgrounded requests an "
  "unprivileged user can set");
 
-unsigned max_user_congthresh;
-module_param_call(max_user_congthresh, set_global_limit, param_get_uint,
-		  &max_user_congthresh, 0644);
-__MODULE_PARM_TYPE(max_user_congthresh, "uint");
-MODULE_PARM_DESC(max_user_congthresh,
+unsigned lemax_user_congthresh;
+module_param_call(lemax_user_congthresh, set_global_limit, param_get_uint,
+		  &lemax_user_congthresh, 0644);
+__MODULE_PARM_TYPE(lemax_user_congthresh, "uint");
+MODULE_PARM_DESC(lemax_user_congthresh,
  "Global limit for the maximum congestion threshold an "
  "unprivileged user can set");
 
@@ -75,7 +75,7 @@ struct fuse_mount_data {
 	unsigned blksize;
 };
 
-struct fuse_forget_link *fuse_alloc_forget(void)
+struct fuse_forget_link *lefuse_alloc_forget(void)
 {
 	return kzalloc(sizeof(struct fuse_forget_link), GFP_KERNEL);
 }
@@ -99,7 +99,7 @@ static struct inode *fuse_alloc_inode(struct super_block *sb)
 	INIT_LIST_HEAD(&fi->queued_writes);
 	INIT_LIST_HEAD(&fi->writepages);
 	init_waitqueue_head(&fi->page_waitq);
-	fi->forget = fuse_alloc_forget();
+	fi->forget = lefuse_alloc_forget();
 	if (!fi->forget) {
 		kmem_cache_free(fuse_inode_cachep, inode);
 		return NULL;
@@ -130,7 +130,7 @@ static void fuse_evict_inode(struct inode *inode)
 	if (inode->i_sb->s_flags & MS_ACTIVE) {
 		struct fuse_conn *fc = get_fuse_conn(inode);
 		struct fuse_inode *fi = get_fuse_inode(inode);
-		fuse_queue_forget(fc, fi->forget, fi->nodeid, fi->nlookup);
+		lefuse_queue_forget(fc, fi->forget, fi->nodeid, fi->nlookup);
 		fi->forget = NULL;
 	}
 }
@@ -143,7 +143,7 @@ static int fuse_remount_fs(struct super_block *sb, int *flags, char *data)
 	return 0;
 }
 
-void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
+void lefuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 				   u64 attr_valid)
 {
 	struct fuse_conn *fc = get_fuse_conn(inode);
@@ -180,7 +180,7 @@ void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 		inode->i_mode &= ~S_ISVTX;
 }
 
-void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
+void lefuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 			    u64 attr_valid, u64 attr_version)
 {
 	struct fuse_conn *fc = get_fuse_conn(inode);
@@ -193,7 +193,7 @@ void fuse_change_attributes(struct inode *inode, struct fuse_attr *attr,
 		return;
 	}
 
-	fuse_change_attributes_common(inode, attr, attr_valid);
+	lefuse_change_attributes_common(inode, attr, attr_valid);
 
 	oldsize = inode->i_size;
 	i_size_write(inode, attr->size);
@@ -210,22 +210,22 @@ static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr)
 	inode->i_mode = attr->mode & S_IFMT;
 	inode->i_size = attr->size;
 	if (S_ISREG(inode->i_mode)) {
-		fuse_init_common(inode);
-		fuse_init_file_inode(inode);
+		lefuse_init_common(inode);
+		lefuse_init_file_inode(inode);
 	} else if (S_ISDIR(inode->i_mode))
-		fuse_init_dir(inode);
+		lefuse_init_dir(inode);
 	else if (S_ISLNK(inode->i_mode))
-		fuse_init_symlink(inode);
+		lefuse_init_symlink(inode);
 	else if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode) ||
 		 S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
-		fuse_init_common(inode);
+		lefuse_init_common(inode);
 		init_special_inode(inode, inode->i_mode,
 				   new_decode_dev(attr->rdev));
 	} else
 		BUG();
 }
 
-int fuse_inode_eq(struct inode *inode, void *_nodeidp)
+int lefuse_inode_eq(struct inode *inode, void *_nodeidp)
 {
 	u64 nodeid = *(u64 *) _nodeidp;
 	if (get_node_id(inode) == nodeid)
@@ -241,7 +241,7 @@ static int fuse_inode_set(struct inode *inode, void *_nodeidp)
 	return 0;
 }
 
-struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
+struct inode *lefuse_iget(struct super_block *sb, u64 nodeid,
 			int generation, struct fuse_attr *attr,
 			u64 attr_valid, u64 attr_version)
 {
@@ -250,7 +250,7 @@ struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 	struct fuse_conn *fc = get_fuse_conn_super(sb);
 
  retry:
-	inode = iget5_locked(sb, nodeid, fuse_inode_eq, fuse_inode_set, &nodeid);
+	inode = iget5_locked(sb, nodeid, lefuse_inode_eq, fuse_inode_set, &nodeid);
 	if (!inode)
 		return NULL;
 
@@ -271,23 +271,23 @@ struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
 	spin_lock(&fc->lock);
 	fi->nlookup++;
 	spin_unlock(&fc->lock);
-	fuse_change_attributes(inode, attr, attr_valid, attr_version);
+	lefuse_change_attributes(inode, attr, attr_valid, attr_version);
 
 	return inode;
 }
 
-int fuse_reverse_inval_inode(struct super_block *sb, u64 nodeid,
+int lefuse_reverse_inval_inode(struct super_block *sb, u64 nodeid,
 			     loff_t offset, loff_t len)
 {
 	struct inode *inode;
 	pgoff_t pg_start;
 	pgoff_t pg_end;
 
-	inode = ilookup5(sb, nodeid, fuse_inode_eq, &nodeid);
+	inode = ilookup5(sb, nodeid, lefuse_inode_eq, &nodeid);
 	if (!inode)
 		return -ENOENT;
 
-	fuse_invalidate_attr(inode);
+	lefuse_invalidate_attr(inode);
 	if (offset >= 0) {
 		pg_start = offset >> PAGE_CACHE_SHIFT;
 		if (len <= 0)
@@ -303,7 +303,7 @@ int fuse_reverse_inval_inode(struct super_block *sb, u64 nodeid,
 
 static void fuse_umount_begin(struct super_block *sb)
 {
-	fuse_abort_conn(get_fuse_conn_super(sb));
+	lefuse_abort_conn(get_fuse_conn_super(sb));
 }
 
 static void fuse_send_destroy(struct fuse_conn *fc)
@@ -313,8 +313,8 @@ static void fuse_send_destroy(struct fuse_conn *fc)
 		fc->destroy_req = NULL;
 		req->in.h.opcode = FUSE_DESTROY;
 		req->force = 1;
-		fuse_request_send(fc, req);
-		fuse_put_request(fc, req);
+		lefuse_request_send(fc, req);
+		lefuse_put_request(fc, req);
 	}
 }
 
@@ -324,7 +324,7 @@ static void fuse_bdi_destroy(struct fuse_conn *fc)
 		bdi_destroy(&fc->bdi);
 }
 
-void fuse_conn_kill(struct fuse_conn *fc)
+void lefuse_conn_kill(struct fuse_conn *fc)
 {
 	spin_lock(&fc->lock);
 	fc->connected = 0;
@@ -335,21 +335,21 @@ void fuse_conn_kill(struct fuse_conn *fc)
 	wake_up_all(&fc->waitq);
 	wake_up_all(&fc->blocked_waitq);
 	wake_up_all(&fc->reserved_req_waitq);
-	mutex_lock(&fuse_mutex);
+	mutex_lock(&lefuse_mutex);
 	list_del(&fc->entry);
-	fuse_ctl_remove_conn(fc);
-	mutex_unlock(&fuse_mutex);
+	lefuse_ctl_remove_conn(fc);
+	mutex_unlock(&lefuse_mutex);
 	fuse_bdi_destroy(fc);
 }
-EXPORT_SYMBOL_GPL(fuse_conn_kill);
+EXPORT_SYMBOL_GPL(lefuse_conn_kill);
 
 static void fuse_put_super(struct super_block *sb)
 {
 	struct fuse_conn *fc = get_fuse_conn_super(sb);
 
 	fuse_send_destroy(fc);
-	fuse_conn_kill(fc);
-	fuse_conn_put(fc);
+	lefuse_conn_kill(fc);
+	lefuse_conn_put(fc);
 }
 
 static void convert_fuse_statfs(struct kstatfs *stbuf, struct fuse_kstatfs *attr)
@@ -366,9 +366,8 @@ static void convert_fuse_statfs(struct kstatfs *stbuf, struct fuse_kstatfs *attr
 	/* fsid is left zero */
 }
 
-dev_t fuse_data_dev=0;
-int  devnum=0;
-
+dev_t lefuse_data_dev=0;
+int  ledevnum=0;
 static int fuse_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct super_block *sb = dentry->d_sb;
@@ -377,12 +376,12 @@ static int fuse_statfs(struct dentry *dentry, struct kstatfs *buf)
 	struct fuse_statfs_out outarg;
 	int err;
 
-	if (!fuse_allow_task(fc, current)) {
+	if (!lefuse_allow_task(fc, current)) {
 		buf->f_type = FUSE_SUPER_MAGIC;
 		return 0;
 	}
 
-	req = fuse_get_req(fc);
+	req = lefuse_get_req(fc);
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
@@ -394,13 +393,13 @@ static int fuse_statfs(struct dentry *dentry, struct kstatfs *buf)
 	req->out.args[0].size =
 		fc->minor < 4 ? FUSE_COMPAT_STATFS_SIZE : sizeof(outarg);
 	req->out.args[0].value = &outarg;
-	fuse_request_send(fc, req);
+	lefuse_request_send(fc, req);
 	err = req->out.h.error;
 	if (!err)
 	{
 		convert_fuse_statfs(buf, &outarg.st);
 #ifdef  LIMIT_SDCARD_SIZE
-		if((sb->s_dev==fuse_data_dev)&&(outarg.st.bsize!=0)) //internal sdcard
+		if((sb->s_dev==lefuse_data_dev)&&(outarg.st.bsize!=0)) //internal sdcard
 		{
 			buf->f_blocks  -= (u32)data_free_size_th/outarg.st.bsize;
 			if(buf->f_bfree < ((u32)data_free_size_th/outarg.st.bsize)){
@@ -416,7 +415,7 @@ static int fuse_statfs(struct dentry *dentry, struct kstatfs *buf)
 		}
 #endif
 	}
-	fuse_put_request(fc, req);
+	lefuse_put_request(fc, req);
 	return err;
 }
 
@@ -470,7 +469,7 @@ static int parse_fuse_opt(char *opt, struct fuse_mount_data *d, int is_bdev)
 		case OPT_ROOTMODE:
 			if (match_octal(&args[0], &value))
 				return 0;
-			if (!fuse_valid_type(value))
+			if (!lefuse_valid_type(value))
 				return 0;
 			d->rootmode = value;
 			d->rootmode_present = 1;
@@ -540,7 +539,7 @@ static int fuse_show_options(struct seq_file *m, struct dentry *root)
 	return 0;
 }
 
-void fuse_conn_init(struct fuse_conn *fc)
+void lefuse_conn_init(struct fuse_conn *fc)
 {
 	memset(fc, 0, sizeof(*fc));
 	spin_lock_init(&fc->lock);
@@ -567,25 +566,25 @@ void fuse_conn_init(struct fuse_conn *fc)
 	fc->attr_version = 1;
 	get_random_bytes(&fc->scramble_key, sizeof(fc->scramble_key));
 }
-EXPORT_SYMBOL_GPL(fuse_conn_init);
+EXPORT_SYMBOL_GPL(lefuse_conn_init);
 
-void fuse_conn_put(struct fuse_conn *fc)
+void lefuse_conn_put(struct fuse_conn *fc)
 {
 	if (atomic_dec_and_test(&fc->count)) {
 		if (fc->destroy_req)
-			fuse_request_free(fc->destroy_req);
+			lefuse_request_free(fc->destroy_req);
 		mutex_destroy(&fc->inst_mutex);
 		fc->release(fc);
 	}
 }
-EXPORT_SYMBOL_GPL(fuse_conn_put);
+EXPORT_SYMBOL_GPL(lefuse_conn_put);
 
-struct fuse_conn *fuse_conn_get(struct fuse_conn *fc)
+struct fuse_conn *lefuse_conn_get(struct fuse_conn *fc)
 {
 	atomic_inc(&fc->count);
 	return fc;
 }
-EXPORT_SYMBOL_GPL(fuse_conn_get);
+EXPORT_SYMBOL_GPL(lefuse_conn_get);
 
 static struct inode *fuse_get_root_inode(struct super_block *sb, unsigned mode)
 {
@@ -595,7 +594,7 @@ static struct inode *fuse_get_root_inode(struct super_block *sb, unsigned mode)
 	attr.mode = mode;
 	attr.ino = FUSE_ROOT_ID;
 	attr.nlink = 1;
-	return fuse_iget(sb, 1, 0, &attr, 0, 0);
+	return lefuse_iget(sb, 1, 0, &attr, 0, 0);
 }
 
 struct fuse_inode_handle {
@@ -614,7 +613,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 	if (handle->nodeid == 0)
 		goto out_err;
 
-	inode = ilookup5(sb, handle->nodeid, fuse_inode_eq, &handle->nodeid);
+	inode = ilookup5(sb, handle->nodeid, lefuse_inode_eq, &handle->nodeid);
 	if (!inode) {
 		struct fuse_entry_out outarg;
 		struct qstr name;
@@ -624,7 +623,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 
 		name.len = 1;
 		name.name = ".";
-		err = fuse_lookup_name(sb, handle->nodeid, &name, &outarg,
+		err = lefuse_lookup_name(sb, handle->nodeid, &name, &outarg,
 				       &inode);
 		if (err && err != -ENOENT)
 			goto out_err;
@@ -642,7 +641,7 @@ static struct dentry *fuse_get_dentry(struct super_block *sb,
 
 	entry = d_obtain_alias(inode);
 	if (!IS_ERR(entry) && get_node_id(inode) != FUSE_ROOT_ID)
-		fuse_invalidate_entry_cache(entry);
+		lefuse_invalidate_entry_cache(entry);
 
 	return entry;
 
@@ -734,7 +733,7 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 
 	name.len = 2;
 	name.name = "..";
-	err = fuse_lookup_name(child_inode->i_sb, get_node_id(child_inode),
+	err = lefuse_lookup_name(child_inode->i_sb, get_node_id(child_inode),
 			       &name, &outarg, &inode);
 	if (err) {
 		if (err == -ENOENT)
@@ -744,7 +743,7 @@ static struct dentry *fuse_get_parent(struct dentry *child)
 
 	parent = d_obtain_alias(inode);
 	if (!IS_ERR(parent) && get_node_id(inode) != FUSE_ROOT_ID)
-		fuse_invalidate_entry_cache(parent);
+		lefuse_invalidate_entry_cache(parent);
 
 	return parent;
 }
@@ -798,21 +797,21 @@ static void process_init_limits(struct fuse_conn *fc, struct fuse_init_out *arg)
 	if (arg->minor < 13)
 		return;
 
-	sanitize_global_limit(&max_user_bgreq);
-	sanitize_global_limit(&max_user_congthresh);
+	sanitize_global_limit(&lemax_user_bgreq);
+	sanitize_global_limit(&lemax_user_congthresh);
 
 	if (arg->max_background) {
 		fc->max_background = arg->max_background;
 
-		if (!cap_sys_admin && fc->max_background > max_user_bgreq)
-			fc->max_background = max_user_bgreq;
+		if (!cap_sys_admin && fc->max_background > lemax_user_bgreq)
+			fc->max_background = lemax_user_bgreq;
 	}
 	if (arg->congestion_threshold) {
 		fc->congestion_threshold = arg->congestion_threshold;
 
 		if (!cap_sys_admin &&
-		    fc->congestion_threshold > max_user_congthresh)
-			fc->congestion_threshold = max_user_congthresh;
+		    fc->congestion_threshold > lemax_user_congthresh)
+			fc->congestion_threshold = lemax_user_congthresh;
 	}
 }
 
@@ -889,7 +888,7 @@ static void fuse_send_init(struct fuse_conn *fc, struct fuse_req *req)
 	req->out.args[0].size = sizeof(struct fuse_init_out);
 	req->out.args[0].value = &req->misc.init_out;
 	req->end = process_init_reply;
-	fuse_request_send_background(fc, req);
+	lefuse_request_send_background(fc, req);
 }
 
 static void fuse_free_conn(struct fuse_conn *fc)
@@ -980,7 +979,7 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	if (!file)
 		goto err;
 
-	if (file->f_op != &fuse_dev_operations)
+	if (file->f_op != &lefuse_dev_operations)
 		goto err_fput;
 
 	fc = kmalloc(sizeof(*fc), GFP_KERNEL);
@@ -988,14 +987,13 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	if (!fc)
 		goto err_fput;
 
-	fuse_conn_init(fc);
+	lefuse_conn_init(fc);
 
 	fc->dev = sb->s_dev;
-
-	if(devnum==0)
+	if(ledevnum==0)
 	{
-		fuse_data_dev = sb->s_dev;
-		devnum=1;
+		lefuse_data_dev = sb->s_dev;
+		ledevnum=1;
 	}
 	fc->sb = sb;
 	err = fuse_bdi_init(fc, sb);
@@ -1024,32 +1022,32 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	if (!root_dentry)
 		goto err_put_conn;
 	/* only now - we want root dentry with NULL ->d_op */
-	sb->s_d_op = &fuse_dentry_operations;
+	sb->s_d_op = &lefuse_dentry_operations;
 
-	init_req = fuse_request_alloc();
+	init_req = lefuse_request_alloc();
 	if (!init_req)
 		goto err_put_root;
 
 	if (is_bdev) {
-		fc->destroy_req = fuse_request_alloc();
+		fc->destroy_req = lefuse_request_alloc();
 		if (!fc->destroy_req)
 			goto err_free_init_req;
 	}
 
-	mutex_lock(&fuse_mutex);
+	mutex_lock(&lefuse_mutex);
 	err = -EINVAL;
 	if (file->private_data)
 		goto err_unlock;
 
-	err = fuse_ctl_add_conn(fc);
+	err = lefuse_ctl_add_conn(fc);
 	if (err)
 		goto err_unlock;
 
-	list_add_tail(&fc->entry, &fuse_conn_list);
+	list_add_tail(&fc->entry, &lefuse_conn_list);
 	sb->s_root = root_dentry;
 	fc->connected = 1;
-	file->private_data = fuse_conn_get(fc);
-	mutex_unlock(&fuse_mutex);
+	file->private_data = lefuse_conn_get(fc);
+	mutex_unlock(&lefuse_mutex);
 	/*
 	 * atomic_dec_and_test() in fput() provides the necessary
 	 * memory barrier for file->private_data to be visible on all
@@ -1062,14 +1060,14 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	return 0;
 
  err_unlock:
-	mutex_unlock(&fuse_mutex);
+	mutex_unlock(&lefuse_mutex);
  err_free_init_req:
-	fuse_request_free(init_req);
+	lefuse_request_free(init_req);
  err_put_root:
 	dput(root_dentry);
  err_put_conn:
 	fuse_bdi_destroy(fc);
-	fuse_conn_put(fc);
+	lefuse_conn_put(fc);
  err_fput:
 	fput(file);
  err:
@@ -1098,7 +1096,7 @@ static void fuse_kill_sb_anon(struct super_block *sb)
 
 static struct file_system_type fuse_fs_type = {
 	.owner		= THIS_MODULE,
-	.name		= "fuse",
+	.name		= "lefuse",
 	.fs_flags	= FS_HAS_SUBTYPE,
 	.mount		= fuse_mount,
 	.kill_sb	= fuse_kill_sb_anon,
@@ -1127,7 +1125,7 @@ static void fuse_kill_sb_blk(struct super_block *sb)
 
 static struct file_system_type fuseblk_fs_type = {
 	.owner		= THIS_MODULE,
-	.name		= "fuseblk",
+	.name		= "lefuseblk",
 	.mount		= fuse_mount_blk,
 	.kill_sb	= fuse_kill_sb_blk,
 	.fs_flags	= FS_REQUIRES_DEV | FS_HAS_SUBTYPE,
@@ -1164,7 +1162,7 @@ static int __init fuse_fs_init(void)
 {
 	int err;
 
-	fuse_inode_cachep = kmem_cache_create("fuse_inode",
+	fuse_inode_cachep = kmem_cache_create("lefuse_inode",
 					      sizeof(struct fuse_inode),
 					      0, SLAB_HWCACHE_ALIGN,
 					      fuse_inode_init_once);
@@ -1204,7 +1202,7 @@ static int fuse_sysfs_init(void)
 {
 	int err;
 
-	fuse_kobj = kobject_create_and_add("fuse", fs_kobj);
+	fuse_kobj = kobject_create_and_add("lefuse", fs_kobj);
 	if (!fuse_kobj) {
 		err = -ENOMEM;
 		goto out_err;
@@ -1237,12 +1235,12 @@ static int __init fuse_init(void)
 	printk(KERN_INFO "fuse init (API version %i.%i)\n",
 	       FUSE_KERNEL_VERSION, FUSE_KERNEL_MINOR_VERSION);
 
-	INIT_LIST_HEAD(&fuse_conn_list);
+	INIT_LIST_HEAD(&lefuse_conn_list);
 	res = fuse_fs_init();
 	if (res)
 		goto err;
 
-	res = fuse_dev_init();
+	res = lefuse_dev_init();
 	if (res)
 		goto err_fs_cleanup;
 
@@ -1250,19 +1248,19 @@ static int __init fuse_init(void)
 	if (res)
 		goto err_dev_cleanup;
 
-	res = fuse_ctl_init();
+	res = lefuse_ctl_init();
 	if (res)
 		goto err_sysfs_cleanup;
 
-	sanitize_global_limit(&max_user_bgreq);
-	sanitize_global_limit(&max_user_congthresh);
+	sanitize_global_limit(&lemax_user_bgreq);
+	sanitize_global_limit(&lemax_user_congthresh);
 
 	return 0;
 
  err_sysfs_cleanup:
 	fuse_sysfs_cleanup();
  err_dev_cleanup:
-	fuse_dev_cleanup();
+	lefuse_dev_cleanup();
  err_fs_cleanup:
 	fuse_fs_cleanup();
  err:
@@ -1273,10 +1271,10 @@ static void __exit fuse_exit(void)
 {
 	printk(KERN_DEBUG "fuse exit\n");
 
-	fuse_ctl_cleanup();
+	lefuse_ctl_cleanup();
 	fuse_sysfs_cleanup();
 	fuse_fs_cleanup();
-	fuse_dev_cleanup();
+	lefuse_dev_cleanup();
 }
 
 module_init(fuse_init);
