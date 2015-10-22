@@ -25,8 +25,12 @@
 	};
 
 	qcom,mdss_dsi@fd922800 {
-		qcom,dsi-pref-prim-pan = <&dsi_tosh_720_vid>;
-	};
+		qcom,dsi-pref-prim-pan = <&dsi_lgd_r63319_WQHD_vid0>;
+	};	
+
+	qcom,mdss_dsi@fd922e00 {
+		qcom,dsi-pref-prim-pan = <&dsi_lgd_r63319_WQHD_vid1>;
+	};	
 
 	qcom,mdss_mdp@fd900000 {
 		qcom,mdss-pref-prim-intf = "dsi";
@@ -38,6 +42,27 @@
 	};
 
 	i2c@f9924000 {
+        synaptics_s3408@38 {
+            compatible = "synaptics,s3408";
+			reg = <0x38>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <82 0x2>;
+            vdd-supply = <&pm8941_l18>;
+            vdd1-supply = <&pm8941_l23>;
+            vcc_i2c-supply = <&pm8941_l12>;
+			synaptics,reset-gpio = <&msmgpio 94 0x00>;
+			synaptics,irq-gpio = <&msmgpio 82 0x00>;
+			synaptics,button-map = <139 172 158>;
+			synaptics,i2c-pull-up;
+			synaptics,power-down;
+		};
+        isl29124_f@44 {
+            compatible = "isl29124_f";
+                         reg = <0x44>;
+                         vdd-supply = <&pm8941_l18>;
+                         vcc_i2c-supply = <&pm8941_lvs1>;
+                };
+
 		synaptics@20 {
 			compatible = "synaptics,rmi4";
 			reg = <0x20>;
@@ -164,6 +189,51 @@
 				regulator-max-microamp = <9360>;
 			};
 		};
+
+		bq27530@55 {
+			reg = <0x55>;
+	        compatible = "ti,bq27530-battery";
+			interrupt-parent = <&msmgpio>;
+			vcc_i2c-supply = <&pm8941_s3>;
+			bq27530,chg-int-gpio = <&msmgpio 144 0x00>;
+			bq27530,fg-int-gpio = <&msmgpio 86 0x00>;
+			bq27530,usb-sw-gpio = <&msmgpio 78 0x00>;
+			bq27530,chg-en-gpio = <&pm8941_gpios 10 0x00>;
+			bq27530,chg-otg-gpio = <&pm8941_gpios 11 0x00>;
+			bq27530,chg-psel-gpio = <&pm8941_gpios 12 0x00>;
+			bq27530,usb-sw-en-gpio = <&pm8941_gpios 14 0x00>;
+           };
+	};
+
+	i2c@f9928000 {
+               3-0028@28 {
+                       compatible = "nxp,nfc-547";
+                       reg = <0x28>;
+                       interrupt-parent = <&msmgpio>;
+                       interrupts = <95 0x2>;
+                       nxp-nfc-547,irq-gpio = <&msmgpio 95 0x00>;
+                       nxp-nfc-547,firm-gpio = <&msmgpio 81 0x00>;
+                       nxp-nfc-547,ven-gpio = <&msmgpio 102 0x00>;
+                       //nxp-nfc-547,clk-req = <&pm894_gpios 35 0x1>;
+		       qcom,clk-src = "BBCLK2";
+                       qcom,clk-gpio = <&pm8941_gpios 35 0>;
+               };
+       };
+
+
+	i2c@f9927000 {
+		tfa9890@34 {
+			compatible = "nxp,tfa9890";
+			reg = <0x34>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <27 0x2>;
+			irq-gpio = <&msmgpio 27 0x00>;
+			reset-gpio = <&msmgpio 23 0x00>;
+            vdd-supply = <&pm8941_s3>;
+            vcc_i2c-supply = <&pm8941_lvs1>;
+			tfa9890,i2c-pull-up;
+			tfa9890,power-down;
+		};
 	};
 
 	gpio_keys {
@@ -213,11 +283,24 @@
 
 	sound {
 		qcom,model = "msm8974-taiko-mtp-snd-card";
+		qcom,us-euro-gpios = <&pm8941_gpios 20 0>;
 		qcom,cdc-micbias2-headset-only;
-		qcom,mbhc-audio-jack-type = "6-pole-jack";
+		qcom,mbhc-audio-jack-type = "4-pole-jack";
 	};
+
+    hw_ver {
+        reg = <0 0x0>;
+        compatible = "hw-version";
+        qcom,adc0-channel-num = <0x14>; /* VER_ADC0 */
+        qcom,adc1-channel-num = <0x15>; /* VER_ADC1 */
+        qcom,hw_ver-vadc = <&pm8941_vadc>;
+        gpios = <&msmgpio 56 0>, /* VER_GPIO0 */
+              <&msmgpio 92 0>;   /* VER_GPIO1 */
+    };
 };
 
+//yangjq, 20140422, Disable unused WLED module to save about 3mA current, START
+/*
 &pm8941_lsid1 {
 	qcom,leds@d800 {
 		status = "okay";
@@ -275,6 +358,8 @@
 		status = "disabled";
 	};
 };
+*/
+//yangjq, 20140422, Disable unused WLED module to save about 3mA current, END
 
 &sdcc1 {
        status = "disabled";
@@ -493,37 +578,52 @@
 	};
 
 	gpio@c900 { /* GPIO 10 */
+        /*BQ27530_EN*/
 		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */
+		qcom,output-type = <0>;	  /* CMOS */
+		qcom,pull = <5>;		  /* PULL_NO */
+		#qcom,out-strength = <2>;  /* QPNP_PIN_OUT_STRENGTH_MED */
 		qcom,out-strength = <1>;  /* QPNP_PIN_OUT_STRENGTH_LOW */
-		qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
+		qcom,src-sel = <0>;       /* QPNP_PIN_SEL_FUN_CONSTANT  */
 		qcom,master-en = <1>;
 	};
 
 	gpio@ca00 { /* GPIO 11 */
 		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */
 		qcom,out-strength = <1>;  /* QPNP_PIN_OUT_STRENGTH_LOW */
-		qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
+		qcom,src-sel = <0>;       /* QPNP_PIN_SEL_FUNC_  */
 		qcom,master-en = <1>;
 	};
 
 	gpio@cb00 { /* GPIO 12 */
 		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */
+		qcom,output-type = <0>;	  /* CMOS */
+		#qcom,out-strength = <2>;  /* QPNP_PIN_OUT_STRENGTH_MED */
+		qcom,src-sel = <0>;       /* QPNP_PIN_SEL_FUN_CONSTANT  */
+		qcom,vin-sel = <0>;     /* QPNP_PIN_VIN2  */
+		qcom,pull = <5>;		  /* PULL_NO */
+		#qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
 		qcom,out-strength = <1>;  /* QPNP_PIN_OUT_STRENGTH_LOW */
-		qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
 		qcom,master-en = <1>;
 	};
 
 	gpio@cc00 { /* GPIO 13 */
 		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */
+		qcom,output-type = <0>;
+		qcom,pull = <5>;
+		qcom,vin-sel = <3>;
 		qcom,out-strength = <1>;  /* QPNP_PIN_OUT_STRENGTH_LOW */
-		qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
+		qcom,src-sel = <0>;       /* function: output 1*/ 
 		qcom,master-en = <1>;
 	};
 
 	gpio@cd00 { /* GPIO 14 */
 		qcom,mode = <1>;          /* QPNP_PIN_MODE_DIG_OUT */
+		qcom,output-type = <0>;	  /* CMOS */
 		qcom,out-strength = <1>;  /* QPNP_PIN_OUT_STRENGTH_LOW */
-		qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
+		#qcom,src-sel = <2>;       /* QPNP_PIN_SEL_FUNC_1  */
+		qcom,src-sel = <0>;       /* QPNP_PIN_SEL_FUN_CONSTANT  */
+		qcom,vin-sel = <0>;     /* QPNP_PIN_VIN2  */
 		qcom,master-en = <1>;
 	};
 
@@ -651,9 +751,13 @@
 	};
 
 	gpio@e200 { /* GPIO 35 */
+		//qcom,src-sel = <0>;   /* GPIO */
+		qcom,src-sel = <0>;     /* XO_OUT_A2_EN */
 		qcom,mode = <0>;        /* QPNP_PIN_MODE_DIG_IN */
-		qcom,pull = <4>;	/* QPNP_PIN_PULL_DN */
-		qcom,master-en = <1>;
+		qcom,pull = <5>;	/* QPNP_PIN_PULL_DN --Leon: NP -- */
+		qcom,vin-sel = <2>; 	/* add pm8941 S3 = 1.8v */
+		qcom,master-en = <1>;   /* Enable */
+		status = "ok";
 	};
 
 	gpio@e300 { /* GPIO 36 */
@@ -679,16 +783,19 @@
 	};
 
 	mpp@a400 { /* MPP 5 */
+        qcom,mode = <4>;    /* AIN input */
+        qcom,invert = <1>;  /* Enable MPP */
+        qcom,ain-route = <0>; /* AMUX 5 */
+        qcom,master-en = <1>;
+        qcom,src-sel = <0>; /* Function constant */
 	};
 
 	mpp@a500 { /* MPP 6 */
-		/* SPI_ETH_RST config */
-		qcom,mode = <1>; /* DIG_OUT */
-		qcom,output-type = <0>; /* CMOS */
-		qcom,vin-sel = <2>; /* PM8941_S3 1.8V > 1.6V */
-		qcom,src-sel = <0>; /* CONSTANT */
-		qcom,out-strength = <1>;  /* QPNP_PIN_OUT_STRENGTH_LOW */
-		qcom,master-en = <1>; /* ENABLE MPP */
+        qcom,mode = <4>;    /* AIN input */
+        qcom,invert = <1>;  /* Enable MPP */
+        qcom,ain-route = <1>; /* AMUX 6 */
+        qcom,master-en = <1>;
+        qcom,src-sel = <0>; /* Function constant */
 	};
 
 	mpp@a600 { /* MPP 7 */
@@ -706,10 +813,16 @@
 
 &slim_msm {
 	taiko_codec {
-		qcom,cdc-micbias1-ext-cap;
+/*		qcom,cdc-micbias1-ext-cap;*/
 		qcom,cdc-micbias2-ext-cap;
-		qcom,cdc-micbias3-ext-cap;
-		qcom,cdc-micbias4-ext-cap;
+/*		qcom,cdc-micbias3-ext-cap;*/
+/*		qcom,cdc-micbias4-ext-cap;*/
+
+		cdc-vdd-spkdrv-supply = <&pm8941_boost>;
+		qcom,cdc-vdd-spkdrv-voltage = <5000000 5000000>;
+		qcom,cdc-vdd-spkdrv-current = <1250000>;
+
+		qcom,cdc-on-demand-supplies = "cdc-vdd-spkdrv";
 	};
 };
 
@@ -732,14 +845,17 @@
 	};
 };
 
-&dsi_tosh_720_vid {
-       qcom,cont-splash-enabled;
+&dsi_boe_nt35598_WQHD_vid0 {
+	qcom,cont-splash-enabled;
 };
 
-&dsi_generic_720p_cmd {
-       qcom,cont-splash-enabled;
+&dsi_boe_nt35598_WQHD_vid1 {
+    qcom,cont-splash-enabled;
+};
+&dsi_lgd_r63319_WQHD_vid0 {
+	qcom,cont-splash-enabled;
 };
 
-&dsi_jdi_1080_vid {
-       qcom,cont-splash-enabled;
+&dsi_lgd_r63319_WQHD_vid1 {
+    qcom,cont-splash-enabled;
 };

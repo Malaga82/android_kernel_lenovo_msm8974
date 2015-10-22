@@ -81,6 +81,18 @@
 			vdd-supply = <&pma8084_l18>;
 			vcc_i2c-supply = <&pma8084_lvs1>;
 		};
+		synaptics_s3408@38 {
+			vdd-supply = <&pma8084_l18>;
+			vdd1-supply = <&pma8084_l18>;
+			vcc_i2c-supply = <&pma8084_lvs1>;
+		};
+
+                isl29124_f@44 {
+                        vdd-supply = <&pma8084_l18>;
+                        vcc_i2c-supply = <&pma8084_lvs1>;
+
+                };
+
 
 		atmel_mxt_ts@4a {
 			vdd_ana-supply = <&pma8084_l18>;
@@ -107,6 +119,14 @@
 			qcom,clk-gpio = <&pma8084_gpios 10 0>;
 		};
 	};
+
+	i2c@f9927000 {
+		tfa9890@34 {
+			vdd-supply = <&pma8084_s3>;
+			vcc_i2c-supply = <&pma8084_lvs1>;
+		};
+    };
+
 
 	qcom,ssusb@f9200000 {
 		vbus_dwc3-supply = <&pm8941_mvs1>;

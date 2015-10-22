@@ -20,11 +20,17 @@
 			qcom,mode = "pwm";
 			qcom,pwm-channel = <6>;
 			qcom,pwm-us = <1000>;
+                        qcom,duty-ms=<500>;
+                        qcom,start-idx=<1>;
+                        qcom,idx-len=<29>;
+                        qcom,duty-pcts=[00 12 24 36 48 63 63 63 48 36 24 12 00 00 00 00 00 00 00 00 00 00 00 00 00];
+                        qcom,duty-pcts1=[16];
+                        qcom,pause-lo = <3000>;
 			qcom,max-current = <12>;
 			qcom,default-state = "off";
 			qcom,id = <3>;
-			linux,default-trigger =
-				"battery-charging";
+//			linux,default-trigger =
+//				"battery-charging";
 		};
 
 		qcom,rgb_1 {
@@ -33,10 +39,16 @@
 			qcom,mode = "pwm";
 			qcom,pwm-channel = <5>;
 			qcom,pwm-us = <1000>;
+                        qcom,duty-ms=<500>;
+                        qcom,start-idx=<1>;
+                        qcom,idx-len=<29>;
+                        qcom,duty-pcts=[00 12 24 36 48 63 63 63 48 36 24 12 00 00 00 00 00 00 00 00 00 00 00 00 00];
+                        qcom,duty-pcts1=[17];
+                        qcom,pause-lo = <3000>;
 			qcom,max-current = <12>;
 			qcom,default-state = "off";
 			qcom,id = <4>;
-			linux,default-trigger = "battery-full";
+//			linux,default-trigger = "battery-full";
 		};
 
 		qcom,rgb_2 {
@@ -45,6 +57,13 @@
 			qcom,mode = "pwm";
 			qcom,pwm-channel = <4>;
 			qcom,pwm-us = <1000>;
+                        qcom,duty-ms=<500>;
+//                      qcom,ramp-step-ms=<5000>;
+                        qcom,start-idx=<1>;
+                        qcom,idx-len=<29>;
+                        qcom,duty-pcts=[00 12 24 36 48 63 63 63 48 36 24 12 00 00 00 00 00 00 00 00 00 00 00 00 00];
+                        qcom,duty-pcts1=[18];
+                        qcom,pause-lo = <3000>;
 			qcom,max-current = <12>;
 			qcom,id = <5>;
 			status = "disabled";
@@ -103,7 +122,9 @@
 			label = "flash";
 			qcom,id = <2>;
 			linux,name = "led:flash_torch";
-			qcom,current = <200>;
+//+ ljk change torch current
+			qcom,current = <100>;
+//+ end
 			qcom,torch-enable;
 		};
 	};
@@ -124,12 +145,21 @@
 		status = "disabled";
 	};
 
+        qcom,vib@c000{
+                        status = "okay";
+                        compatible = "qcom,qpnp-vibrator";
+                        reg = <0xc000 0x100>;
+                        label = "vibrator";
+                        qcom,vib-timeout-ms = <15000>;
+                        qcom,vib-vtg-level-mV = <2850>;
+                };
+
 	qcom,leds@e200 {
 		status = "okay";
 
 		qcom,kpdbl1 {
 			label = "kpdbl";
-			linux,name = "kpdbl-pwm-1";
+			linux,name = "button-backlight";
 			qcom,mode = "pwm";
 			qcom,pwm-channel = <8>;
 			qcom,pwm-us = <1000>;
@@ -138,32 +168,25 @@
 			qcom,row-id = <0>;
 			qcom,row-src-en;
 			qcom,always-on;
-			qcom,start-idx = <1>;
-			qcom,ramp-step-ms = <120>;
-			qcom,duty-pcts = [00 00 00 00 64
-					64 00 00 00 00];
-			qcom,use-blink;
-			qcom,in-order-command-processing;
 		};
 
-		qcom,kpdbl2 {
-			label = "kpdbl";
-			linux,name = "kpdbl-pwm-2";
-			qcom,mode = "pwm";
-			qcom,pwm-channel = <9>;
-			qcom,pwm-us = <1000>;
-			qcom,id = <7>;
-			qcom,max-current = <20>;
-			qcom,row-id = <1>;
-			qcom,row-src-en;
+                qcom,kpdbl2 {
+                        label = "kpdbl";
+                        linux,name = "button-backlight2";
+                        qcom,mode = "pwm";
+                        qcom,pwm-channel = <9>;
+                        qcom,pwm-us = <1000>;
+                        /*
                         qcom,start-idx = <1>;
-                        qcom,ramp-step-ms = <120>;
                         qcom,duty-pcts = [00 00 00 00 64
                                         64 00 00 00 00];
-                        qcom,use-blink;
-                        qcom,in-order-command-processing;
-
-		};
+                                        */
+                        qcom,id = <7>;
+                        qcom,max-current = <20>;
+                        qcom,row-id = <1>;
+                        qcom,row-src-en;
+                        qcom,always-on;
+                };
 
 		qcom,kpdbl3 {
 			label = "kpdbl";

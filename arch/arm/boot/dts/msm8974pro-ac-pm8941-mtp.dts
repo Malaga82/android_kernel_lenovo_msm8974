@@ -31,8 +31,9 @@
 	qcom,usb2-enable-uicc;
 };
 
+/*
 &soc {
-	i2c@f9928000 { /* BLSP1 QUP6 */
+	i2c@f9928000 {
 		nfc-nci@e {
 			compatible = "qcom,nfc-nci";
 			reg = <0x0e>;
@@ -48,11 +49,12 @@
 
 &pm8941_gpios {
 	gpio@df00 {
-		/* NFC clk request */
-		qcom,mode = <0>;                /* QPNP_PIN_MODE_DIG_IN */
-		qcom,pull = <5>;                /* QPNP_PIN_PULL_NO */
-		qcom,vin-sel = <2>;             /* QPNP_PIN_VIN2 */
-		qcom,src-sel = <2>;             /* QPNP_PIN_SEL_FUNC_1 */
+		
+		qcom,mode = <0>; 
+		qcom,pull = <5>;  
+		qcom,vin-sel = <2>;   
+		qcom,src-sel = <2>;   
 		qcom,master-en = <1>;
 	};
 };
+*/
