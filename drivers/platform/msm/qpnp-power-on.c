@@ -1455,6 +1455,8 @@ static int __devinit qpnp_pon_probe(struct spmi_device *spmi)
 		return rc;
 	}
 
+	print_pmic_poweron_register(pon);
+	qpnp_poweroff_reg_init();
 	return rc;
 }
 
