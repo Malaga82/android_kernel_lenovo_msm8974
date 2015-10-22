@@ -357,10 +357,14 @@ static void gpio_keys_gpio_timer(unsigned long _data)
 
 static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 {
+	//yangjq, 20130904, Force to enter ramdump state when pressed volume_up key
+	extern int enter_ramdump_state(int irq);
 	struct gpio_button_data *bdata = dev_id;
 
 	BUG_ON(irq != bdata->irq);
 
+	//yangjq, 20130904, Force to enter ramdump state when pressed volume_up key
+	enter_ramdump_state(irq);
 	if (bdata->timer_debounce)
 		mod_timer(&bdata->timer,
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));

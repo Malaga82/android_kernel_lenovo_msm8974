@@ -46,6 +46,8 @@
 #define WCD9XXX_I2C_DIGITAL_1	2
 #define WCD9XXX_I2C_DIGITAL_2	3
 
+//#define GND_MIC_SWITCH
+
 #define ONDEMAND_REGULATOR true
 #define STATIC_REGULATOR (!ONDEMAND_REGULATOR)
 
@@ -418,7 +420,9 @@ static void wcd9xxx_free_reset(struct wcd9xxx *wcd9xxx)
 		wcd9xxx->reset_gpio = 0;
 	}
 }
-
+#ifdef CONFIG_DEBUG_FS
+static char read_codecid[16]="Invalid ID";
+#endif
 static const struct wcd9xxx_codec_type
 *wcd9xxx_check_codec_type(struct wcd9xxx *wcd9xxx, u8 *version)
 {
@@ -483,6 +487,11 @@ static const struct wcd9xxx_codec_type
 			 "%s: detected %s, major 0x%x, minor 0x%x, ver 0x%x\n",
 			 __func__, d->dev->name, d->id_major, d->id_minor,
 			 *version);
+#ifdef CONFIG_DEBUG_FS
+        strncpy(read_codecid,d->dev->name,sizeof(read_codecid));
+        dev_dbg(wcd9xxx->dev,"read_codecid: %s, d->dev->name %s,sizeof(read_codecid): %d\n",
+                read_codecid,d->dev->name,sizeof(d->dev->name));
+#endif
 	}
 exit:
 	return d;
@@ -654,13 +663,25 @@ struct wcd9xxx *debugCodec;
 static struct dentry *debugfs_wcd9xxx_dent;
 static struct dentry *debugfs_peek;
 static struct dentry *debugfs_poke;
+static struct dentry *debugfs_codecid;
 
 static unsigned char read_data;
+
 
 static int codec_debug_open(struct inode *inode, struct file *file)
 {
 	file->private_data = inode->i_private;
 	return 0;
+}
+
+static ssize_t codecid_debug_read(struct file *file, char __user *ubuf,
+				size_t count, loff_t *ppos)
+{
+	char lbuf[16];
+
+	snprintf(lbuf, sizeof(lbuf), "%s\n", read_codecid);
+	return simple_read_from_buffer(ubuf, count, ppos, lbuf,
+		strnlen(lbuf, 16));
 }
 
 static int get_parameters(char *buf, long int *param1, int num_of_par)
@@ -746,6 +767,11 @@ static const struct file_operations codec_debug_ops = {
 	.open = codec_debug_open,
 	.write = codec_debug_write,
 	.read = codec_debug_read
+};
+
+static const struct file_operations codecid_debug_ops = {
+	.open = codec_debug_open,
+	.read = codecid_debug_read
 };
 #endif
 
@@ -1366,6 +1392,9 @@ static struct wcd9xxx_pdata *wcd9xxx_populate_dt_pdata(struct device *dev)
 	int ret, static_cnt, ond_cnt, cp_supplies_cnt;
 	u32 mclk_rate = 0;
 	u32 dmic_sample_rate = 0;
+#ifdef GND_MIC_SWITCH
+	u32 headset_switch_gpio = 0;
+#endif
 	const char *static_prop_name = "qcom,cdc-static-supplies";
 	const char *ond_prop_name = "qcom,cdc-on-demand-supplies";
 	const char *cp_supplies_name = "qcom,cdc-cp-supplies";
@@ -1476,6 +1505,17 @@ static struct wcd9xxx_pdata *wcd9xxx_populate_dt_pdata(struct device *dev)
 		}
 	}
 	pdata->dmic_sample_rate = dmic_sample_rate;
+
+#ifdef GND_MIC_SWITCH
+    headset_switch_gpio = of_get_named_gpio(dev->of_node,
+            "qcom,headset-gnd-mic-switch", 0);
+    if (headset_switch_gpio > 0) {
+//        printk("enter %s, headset-gnd-mic-switch success, and gpio %d-----------\n",
+//                __func__, headset_switch_gpio);
+        pdata->headset_switch_gpio = headset_switch_gpio;
+    }
+#endif
+
 	return pdata;
 err:
 	devm_kfree(dev, pdata);
@@ -1629,6 +1669,11 @@ static int wcd9xxx_slim_probe(struct slim_device *slim)
 		debugfs_poke = debugfs_create_file("poke",
 		S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent,
 		(void *) "poke", &codec_debug_ops);
+
+        debugfs_codecid = debugfs_create_file("codecid",
+		S_IFREG | S_IRUGO, debugfs_wcd9xxx_dent,
+		(void *) "codecid", &codecid_debug_ops);
+
 	}
 #endif
 

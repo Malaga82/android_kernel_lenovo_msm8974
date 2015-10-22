@@ -29,7 +29,7 @@
 #define ANDROID_ALARM_PRINT_INFO (1U << 0)
 #define ANDROID_ALARM_PRINT_IO (1U << 1)
 #define ANDROID_ALARM_PRINT_INT (1U << 2)
-
+extern void alarm_set_real_rtc(int alarm_type,  struct timespec new_alarm_time);
 static int debug_mask = ANDROID_ALARM_PRINT_INFO;
 module_param_named(debug_mask, debug_mask, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
@@ -59,6 +59,15 @@ static uint32_t wait_pending;
 
 static struct alarm alarms[ANDROID_ALARM_TYPE_COUNT];
 
+#ifndef LENOVO_POWEROFF_ALARM
+#define LENOVO_POWEROFF_ALARM
+#endif
+#define ANDROID_ALARM_RTC_DEVICEUP 6
+#define pwoff_mask (1U << ANDROID_ALARM_RTC_POWEROFF_WAKEUP)
+#define deviceup_mask (1U << ANDROID_ALARM_RTC_DEVICEUP)
+
+void set_alarm_deviceup_dev(ktime_t end);
+
 static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int rv = 0;
@@ -67,8 +76,16 @@ static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	struct timespec new_rtc_time;
 	struct timespec tmp_time;
 	enum android_alarm_type alarm_type = ANDROID_ALARM_IOCTL_TO_TYPE(cmd);
-	uint32_t alarm_type_mask = 1U << alarm_type;
+	#ifndef LENOVO_POWEROFF_ALARM
+   uint32_t alarm_type_mask = 1U << alarm_type;
+   #else
+    uint32_t alarm_type_mask = 0;
+	if (alarm_type == ANDROID_ALARM_RTC_DEVICEUP) {
+		alarm_type = ANDROID_ALARM_RTC_POWEROFF_WAKEUP;
+		}
 
+	alarm_type_mask = 1U << alarm_type;
+   #endif
 	if (alarm_type >= ANDROID_ALARM_TYPE_COUNT)
 		return -EINVAL;
 
@@ -134,6 +151,12 @@ from_old_alarm_set:
 			timespec_to_ktime(new_alarm_time),
 			timespec_to_ktime(new_alarm_time));
 		spin_unlock_irqrestore(&alarm_slock, flags);
+#ifdef LENOVO_POWEROFF_ALARM
+		if (alarm_type == ANDROID_ALARM_RTC_POWEROFF_WAKEUP)
+        {
+                alarm_set_real_rtc(alarm_type, new_alarm_time);
+        }
+#endif
 		if ((alarm_type == ANDROID_ALARM_RTC_POWEROFF_WAKEUP) &&
 				(ANDROID_ALARM_BASE_CMD(cmd) ==
 				 ANDROID_ALARM_SET(0)))
@@ -154,6 +177,17 @@ from_old_alarm_set:
 		rv = wait_event_interruptible(alarm_wait_queue, alarm_pending);
 		if (rv)
 			goto err1;
+#ifdef LENOVO_POWEROFF_ALARM
+		//AndyPan add
+		if (alarm_pending & pwoff_mask)
+		{
+			//printk("andy alarm_pending &= ~ pwoff_mask =%d \r\n",alarm_pending);
+			alarm_pending &= ~ pwoff_mask;
+			alarm_pending |= deviceup_mask;
+			printk("andy alarm_pending |= deviceup_mask =%d \r\n",alarm_pending);
+		}
+		//AndyPan add
+#endif
 		spin_lock_irqsave(&alarm_slock, flags);
 		rv = alarm_pending;
 		wait_pending = 1;
@@ -178,7 +212,7 @@ from_old_alarm_set:
 		switch (alarm_type) {
 		case ANDROID_ALARM_RTC_WAKEUP:
 		case ANDROID_ALARM_RTC:
-		case ANDROID_ALARM_RTC_POWEROFF_WAKEUP:
+		//case ANDROID_ALARM_RTC_POWEROFF_WAKEUP:
 			getnstimeofday(&tmp_time);
 			break;
 		case ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP:
@@ -186,6 +220,7 @@ from_old_alarm_set:
 			tmp_time =
 				ktime_to_timespec(alarm_get_elapsed_realtime());
 			break;
+		case ANDROID_ALARM_RTC_POWEROFF_WAKEUP:
 		case ANDROID_ALARM_TYPE_COUNT:
 		case ANDROID_ALARM_SYSTEMTIME:
 			ktime_get_ts(&tmp_time);

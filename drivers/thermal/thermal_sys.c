@@ -569,9 +569,9 @@ trip_point_type_activate(struct device *dev, struct device_attribute *attr,
 		goto trip_activate_exit;
 	}
 
-	if (!strcmp(buf, "enabled")) {
+	if (!strncmp(buf, "enabled", strlen("enabled"))) {
 		activate = true;
-	} else if (!strcmp(buf, "disabled")) {
+	} else if (!strncmp(buf, "disabled", strlen("disabled"))) {
 		activate = false;
 	} else {
 		result = -EINVAL;
