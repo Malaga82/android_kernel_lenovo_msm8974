@@ -36,6 +36,7 @@
 
 #include <asm/mach/arch.h>
 #include <asm/mach/map.h>
+#include <mach/le_rkm.h>
 
 #include "mm.h"
 
@@ -505,6 +506,9 @@ void __init arm_memblock_init(struct meminfo *mi, struct machine_desc *mdesc)
 
 	arm_memblock_steal_permitted = false;
 	memblock_allow_resize();
+#ifdef CONFIG_LENOVO_DEBUG_RKM
+	arm_rkm_log_backup();
+#endif
 	memblock_dump_all();
 }
 
