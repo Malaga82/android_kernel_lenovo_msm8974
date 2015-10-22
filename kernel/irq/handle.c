@@ -129,11 +129,27 @@ static void irq_wake_thread(struct irq_desc *desc, struct irqaction *action)
 	wake_up_process(action->thread);
 }
 
+#define MAX_HANDLED_IRQ_STAMP_NUM 64
+static unsigned long handled_irq_trace[MAX_HANDLED_IRQ_STAMP_NUM+3][3]; //0:irq, 1:jiffies 2:count
+static unsigned long handled_irq_trace_index=0;
+static unsigned long last_irq_stamp;
+
 irqreturn_t
 handle_irq_event_percpu(struct irq_desc *desc, struct irqaction *action)
 {
 	irqreturn_t retval = IRQ_NONE;
 	unsigned int random = 0, irq = desc->irq_data.irq;
+
+
+	if (irq != handled_irq_trace[handled_irq_trace_index][0]) {
+		handled_irq_trace_index++;
+		handled_irq_trace[handled_irq_trace_index][2] = 0; //irq count
+		handled_irq_trace_index = handled_irq_trace_index & (MAX_HANDLED_IRQ_STAMP_NUM - 1 );
+	}
+	handled_irq_trace[handled_irq_trace_index][0] = irq;
+	handled_irq_trace[handled_irq_trace_index][1] = jiffies;
+	handled_irq_trace[handled_irq_trace_index][2]++; //irq count
+	last_irq_stamp = jiffies;
 
 	do {
 		irqreturn_t res;

@@ -47,6 +47,7 @@
 #include <mach/msm_rtb.h>
 #define CREATE_TRACE_POINTS
 #include <trace/events/printk.h>
+#include <mach/le_rkm.h>
 
 /*
  * Architectures can override it:
@@ -148,7 +149,7 @@ static int console_may_schedule;
 
 #ifdef CONFIG_PRINTK
 
-static char __log_buf[__LOG_BUF_LEN];
+char __log_buf[__LOG_BUF_LEN];
 static char *log_buf = __log_buf;
 static int log_buf_len = __LOG_BUF_LEN;
 static unsigned logged_chars; /* Number of chars produced since last read+clear operation */
@@ -196,8 +197,12 @@ void __init setup_log_buf(int early)
 	char *new_log_buf;
 	int free;
 
-	if (!new_log_buf_len)
+	if (!new_log_buf_len) {
+#ifdef CONFIG_LENOVO_DEBUG_RKM
+		rkm_init_log_buf_header(__log_buf,log_buf_len);
+#endif
 		return;
+	}
 
 	if (early) {
 		unsigned long mem;
@@ -889,6 +894,9 @@ static inline void printk_delay(void)
 	}
 }
 
+/* yangjq, 2012-11-13, For amss_printk, START */
+extern int smem_dmesg_get_message(char *message, int len);
+/* yangjq, 2012-11-13, For amss_printk, END */
 asmlinkage int vprintk(const char *fmt, va_list args)
 {
 	int printed_len = 0;
@@ -937,6 +945,13 @@ asmlinkage int vprintk(const char *fmt, va_list args)
 	printed_len += vscnprintf(printk_buf + printed_len,
 				  sizeof(printk_buf) - printed_len, fmt, args);
 
+       /* yangjq, 2012-11-13, For amss_printk, START */
+#if 1
+       /* Emit the amss_printk output into the temporary buffer */
+       printed_len += smem_dmesg_get_message(printk_buf + printed_len,
+                                 sizeof(printk_buf) - printed_len);
+#endif /* 0 */
+       /* yangjq, 2012-11-13, For amss_printk, END */
 
 	p = printk_buf;
 

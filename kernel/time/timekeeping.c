@@ -1186,7 +1186,7 @@ void get_monotonic_boottime(struct timespec *ts)
 	} while (read_seqretry(&timekeeper.lock, seq));
 
 	set_normalized_timespec(ts, ts->tv_sec + tomono.tv_sec + sleep.tv_sec,
-		(s64)ts->tv_nsec + tomono.tv_nsec + sleep.tv_nsec + nsecs);
+			(s64)ts->tv_nsec + (s64)tomono.tv_nsec + (s64)sleep.tv_nsec + nsecs);
 }
 EXPORT_SYMBOL_GPL(get_monotonic_boottime);
 
@@ -1322,3 +1322,15 @@ void xtime_update(unsigned long ticks)
 	do_timer(ticks);
 	write_sequnlock(&xtime_lock);
 }
+
+#ifdef CONFIG_LENOVO_DEBUG_MRD
+void mrd_register_rtc_xtime(unsigned int tag)
+{
+	extern int mrd_register_shareindex_name(char* name, void* va, int size, unsigned int param1);
+
+	mrd_register_shareindex_name("rtxtime",
+			&timekeeper.xtime.tv_sec,
+			sizeof(timekeeper.xtime.tv_sec),
+			tag);
+}
+#endif
