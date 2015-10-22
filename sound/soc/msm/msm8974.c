@@ -1527,6 +1527,9 @@ static bool msm8974_swap_gnd_mic(struct snd_soc_codec *codec)
 	struct snd_soc_card *card = codec->card;
 	struct msm8974_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
 	int value = gpio_get_value_cansleep(pdata->us_euro_gpio);
+
+    printk(KERN_DEBUG "enter %s line %d, and value = %d \n",
+            __func__, __LINE__, !value);
 	pr_debug("%s: swap select switch %d to %d\n", __func__, value, !value);
 	gpio_set_value_cansleep(pdata->us_euro_gpio, !value);
 

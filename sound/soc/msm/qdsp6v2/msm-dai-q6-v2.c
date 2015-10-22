@@ -1495,7 +1495,7 @@ static int msm_dai_q6_mi2s_prepare(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	dev_dbg(dai->dev, "%s: dai id %d, afe port id = %x\n"
+	printk("%s: dai id %d, afe port id = %x\n"
 		"dai_data->channels = %u sample_rate = %u\n", __func__,
 		dai->id, port_id, dai_data->channels, dai_data->rate);
 
@@ -1632,7 +1632,7 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 			return -EINVAL;
 		}
 	}
-	dev_dbg(dai->dev, "%s: dai id %d dai_data->channels = %d\n"
+	printk("%s: dai id %d dai_data->channels = %d\n"
 		"sample_rate = %u i2s_cfg_minor_version = %#x\n"
 		"bit_width = %hu  channel_mode = %#x mono_stereo = %#x\n"
 		"ws_src = %#x sample_rate = %u data_format = %#x\n"
@@ -1811,6 +1811,7 @@ static int msm_dai_q6_mi2s_get_lineconfig(u16 sd_lines, u16 *config_ptr,
 	u8 num_of_sd_lines;
 
 	num_of_sd_lines = num_of_bits_set(sd_lines);
+	printk("[%s]num_of_sd_lines =%d, sd_lines = %d\n", __func__, num_of_sd_lines, sd_lines);
 	switch (num_of_sd_lines) {
 	case 0:
 		pr_debug("%s: no line is assigned\n", __func__);
@@ -1819,9 +1820,11 @@ static int msm_dai_q6_mi2s_get_lineconfig(u16 sd_lines, u16 *config_ptr,
 		switch (sd_lines) {
 		case MSM_MI2S_SD0:
 			*config_ptr = AFE_PORT_I2S_SD0;
+			printk("[%s]MSM_MI2S_SD0 =%d, AFE_PORT_I2S_SD0 = %d\n", __func__, MSM_MI2S_SD0, AFE_PORT_I2S_SD0);
 			break;
 		case MSM_MI2S_SD1:
 			*config_ptr = AFE_PORT_I2S_SD1;
+			printk("[%s]MSM_MI2S_SD1 =%d, AFE_PORT_I2S_SD1 = %d\n", __func__, MSM_MI2S_SD1, AFE_PORT_I2S_SD1);
 			break;
 		case MSM_MI2S_SD2:
 			*config_ptr = AFE_PORT_I2S_SD2;
@@ -1897,6 +1900,7 @@ static int msm_dai_q6_mi2s_platform_data_validation(
 		return -EINVAL;
 	}
 
+	printk("[%s]MI2S RX sd line config\n", __func__);
 	rc = msm_dai_q6_mi2s_get_lineconfig(mi2s_pdata->rx_sd_lines,
 					    &sd_line, &ch_cnt);
 
@@ -1915,6 +1919,7 @@ static int msm_dai_q6_mi2s_platform_data_validation(
 		dai_driver->playback.channels_min = 0;
 		dai_driver->playback.channels_max = 0;
 	}
+	printk("[%s]MI2S TX sd line config\n", __func__);
 	rc = msm_dai_q6_mi2s_get_lineconfig(mi2s_pdata->tx_sd_lines,
 					    &sd_line, &ch_cnt);
 

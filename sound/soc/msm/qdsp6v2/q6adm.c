@@ -1126,8 +1126,8 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 	int index;
 	int tmp_port = q6audio_get_port_id(port_id);
 
-	pr_debug("%s: port %#x path:%d rate:%d mode:%d perf_mode:%d\n",
-		 __func__, port_id, path, rate, channel_mode, perf_mode);
+	pr_debug("%s: port %#x path:%d rate:%d mode:%d perf_mode:%d bit_width =%d\n",
+		 __func__, port_id, path, rate, channel_mode, perf_mode, bits_per_sample);
 
 	port_id = q6audio_convert_virtual_to_portid(port_id);
 
@@ -1189,7 +1189,9 @@ int adm_open(int port_id, int path, int rate, int channel_mode, int topology,
 			open.endpoint_id_2 = 0xFFFF;
 		} else if (this_adm.ec_ref_rx && (path != 1)) {
 			open.endpoint_id_2 = this_adm.ec_ref_rx;
+			pr_info(" %s ec_ref set %d\n", __func__,  this_adm.ec_ref_rx);
 			this_adm.ec_ref_rx = -1;
+			
 		}
 
 		open.topology_id = topology;

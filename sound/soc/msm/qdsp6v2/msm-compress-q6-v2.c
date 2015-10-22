@@ -1684,7 +1684,9 @@ static int msm_compr_volume_put(struct snd_kcontrol *kcontrol,
 
 	volume[0] = ucontrol->value.integer.value[0];
 	volume[1] = ucontrol->value.integer.value[1];
-	pr_debug("%s: fe_id %lu left_vol %d right_vol %d\n",
+//	pr_debug("%s: fe_id %lu left_vol %d right_vol %d\n",
+//		 __func__, fe_id, volume[0], volume[1]);
+	printk(KERN_DEBUG "%s: fe_id %lu left_vol %d right_vol %d\n",
 		 __func__, fe_id, volume[0], volume[1]);
 	if (cstream)
 		msm_compr_set_volume(cstream, volume[0], volume[1]);
@@ -1707,7 +1709,8 @@ static int msm_compr_volume_get(struct snd_kcontrol *kcontrol,
 	}
 
 	volume = pdata->volume[fe_id];
-	pr_debug("%s: fe_id %lu\n", __func__, fe_id);
+//	pr_debug("%s: fe_id %lu\n", __func__, fe_id);
+	printk(KERN_DEBUG "%s: fe_id %lu\n", __func__, fe_id);
 	ucontrol->value.integer.value[0] = volume[0];
 	ucontrol->value.integer.value[1] = volume[1];
 
@@ -2083,7 +2086,8 @@ static int msm_compr_add_volume_control(struct snd_soc_pcm_runtime *rtd)
 		 rtd->pcm->device, suffix);
 	fe_volume_control[0].name = mixer_str;
 	fe_volume_control[0].private_value = rtd->dai_link->be_id;
-	pr_debug("Registering new mixer ctl %s", mixer_str);
+//	pr_debug("Registering new mixer ctl %s", mixer_str);
+	printk(KERN_DEBUG "Registering new mixer ctl %s", mixer_str);
 	snd_soc_add_platform_controls(rtd->platform, fe_volume_control,
 				      ARRAY_SIZE(fe_volume_control));
 	kfree(mixer_str);

@@ -1491,7 +1491,7 @@ static int msm_routing_ec_ref_rx_put(struct snd_kcontrol *kcontrol,
 		break;
 	}
 	adm_ec_ref_rx_id(ec_ref_port_id);
-	pr_debug("%s: msm_route_ec_ref_rx = %d\n",
+	printk("%s: msm_route_ec_ref_rx = %d\n",
 	    __func__, msm_route_ec_ref_rx);
 	mutex_unlock(&routing_lock);
 	snd_soc_dapm_mux_update_power(widget, kcontrol, 1, mux, e);
@@ -1568,6 +1568,7 @@ static int msm_routing_ext_ec_put(struct snd_kcontrol *kcontrol,
 
 	mutex_lock(&routing_lock);
 	switch (ucontrol->value.integer.value[0]) {
+	
 	case EC_PORT_ID_PRIMARY_MI2S_TX:
 		ext_ec_ref_port_id = AFE_PORT_ID_PRIMARY_MI2S_TX;
 		msm_route_ext_ec_ref = 1;
@@ -1686,6 +1687,8 @@ static const struct soc_enum msm_route_ext_ec_ref_rx_enum[] = {
 static const struct snd_kcontrol_new voc_ext_ec_mux =
 	SOC_DAPM_ENUM_EXT("VOC_EXT_EC MUX Mux", msm_route_ext_ec_ref_rx_enum[0],
 			  msm_routing_ext_ec_get, msm_routing_ext_ec_put);
+
+
 
 
 static const struct snd_kcontrol_new pri_i2s_rx_mixer_controls[] = {
@@ -1809,7 +1812,7 @@ static const struct snd_kcontrol_new mi2s_rx_mixer_controls[] = {
 };
 
 static const struct snd_kcontrol_new quaternary_mi2s_rx_mixer_controls[] = {
-	SOC_SINGLE_EXT("MultiMedia1", MSM_BACKEND_DAI_QUATERNARY_MI2S_RX ,
+	SOC_SINGLE_EXT("MultiMedia1", MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
 	MSM_FRONTEND_DAI_MULTIMEDIA1, 1, 0, msm_routing_get_audio_mixer,
 	msm_routing_put_audio_mixer),
 	SOC_SINGLE_EXT("MultiMedia2", MSM_BACKEND_DAI_QUATERNARY_MI2S_RX,
