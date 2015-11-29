@@ -20,25 +20,12 @@
 #include <linux/of_gpio.h>
 #include <linux/gpio.h>
 #include <linux/err.h>
-#include <linux/workqueue.h>
 #include <linux/regulator/consumer.h>
 
 #include "mdss.h"
 #include "mdss_panel.h"
 #include "mdss_dsi.h"
 #include "mdss_debug.h"
-#include "mdss_fb.h"
-
-#ifdef ESD_FOR_LCD
-struct delayed_work lcd_te_work;
-struct timer_list te_timer;
-int te_running;
-extern void lcd_reset_handle(void);
-extern void esd_set_backlight(void);
-extern void enable_te(struct mdss_dsi_ctrl_pdata *, int);
-#endif
-
-static int read_dsi;
 
 static int mdss_dsi_regulator_init(struct platform_device *pdev)
 {
@@ -59,8 +46,7 @@ static int mdss_dsi_regulator_init(struct platform_device *pdev)
 			ctrl_pdata->power_data.vreg_config,
 			ctrl_pdata->power_data.num_vreg, 1);
 }
-//jinjt add for enable vreg one time when resume
-static int vreg_enable = 0;
+
 static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 {
 	int ret;
@@ -80,8 +66,6 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 		return 0;
 
 	if (enable) {
-        if(vreg_enable!=1)
-        {
 		ret = msm_dss_enable_vreg(
 			ctrl_pdata->power_data.vreg_config,
 			ctrl_pdata->power_data.num_vreg, 1);
@@ -90,8 +74,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 				__func__, ret);
 			goto error;
 		}
-        vreg_enable = 1;
-        }
+
 		if (!pdata->panel_info.mipi.lp11_init) {
 			ret = mdss_dsi_panel_reset(pdata, 1);
 			if (ret) {
@@ -118,7 +101,6 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata, int enable)
 			pr_err("%s: Failed to disable vregs.rc=%d\n",
 				__func__, ret);
 		}
-        vreg_enable = 0;
 	}
 error:
 	return ret;
@@ -684,25 +666,23 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 		return -EINVAL;
 	}
 
-	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
-				panel_data);
-
 	if (pdata->panel_info.panel_power_on) {
 		pr_warn("%s:%d Panel already on.\n", __func__, __LINE__);
-#ifdef ESD_FOR_LCD
-		enable_te(ctrl_pdata, 1);
-#endif
 		return 0;
 	}
-	
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+#ifdef CONFIG_MACH_SHENQI_K9
 	if (gpio_is_valid(ctrl_pdata->disp_vsp_gpio) && gpio_is_valid(ctrl_pdata->disp_vsn_gpio)) {
 		gpio_direction_output(ctrl_pdata->disp_vsp_gpio, 1);
 		udelay(100);
 		wmb();
 		gpio_direction_output(ctrl_pdata->disp_vsn_gpio, 1);
-		msleep(4);
+		//msleep(4);
 		wmb();
-	} 
+	}
+#endif
 
 	pr_debug("%s+: ctrl=%p ndx=%d\n",
 				__func__, ctrl_pdata, ctrl_pdata->ndx);
@@ -1415,29 +1395,6 @@ int mdss_dsi_retrieve_ctrl_resources(struct platform_device *pdev, int mode,
 
 	return 0;
 }
-#ifdef ESD_FOR_LCD
-static void lcd_te_abnormal_handle(struct work_struct *work)
-{
-	printk("!!!!!!!!!!!!!!!! %s !!!!!!!!!!!!!!!!!!!!\n", __func__);
-	if (te_running) {
-		lcd_reset_handle();
-		esd_set_backlight();
-	}
-}
-void te_timer_handle(unsigned long data)
-{
-	schedule_delayed_work(&lcd_te_work, 0);
-}
-irqreturn_t lcd_te_irq_handle(int irq, void *dev_id)
-{
-	if (te_running)
-		mod_timer(&te_timer, 2 * HZ + jiffies);
-	else
-		printk("************** timer closed *****************\n");
-	return IRQ_HANDLED;
-}
-#endif
-
 
 int dsi_panel_device_register(struct device_node *pan_node,
 				struct mdss_dsi_ctrl_pdata *ctrl_pdata)
@@ -1575,6 +1532,7 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	ctrl_pdata->disp_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 		"qcom,platform-enable-gpio", 0);
 
+#ifdef CONFIG_MACH_SHENQI_K9
 	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio)) {
 		pr_err("%s:%d, Disp_en gpio not specified\n",
 						__func__, __LINE__);
@@ -1599,7 +1557,6 @@ int dsi_panel_device_register(struct device_node *pan_node,
 	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
 			 "qcom,platform-reset-gpio", 0);
 
-	printk("***************** ctrl_pdata->rst_gpio = %d *****************\n", ctrl_pdata->rst_gpio);
 	if (!gpio_is_valid(ctrl_pdata->rst_gpio)) {
 		pr_err("%s:%d, reset gpio not specified\n",
 						__func__, __LINE__);
@@ -1613,6 +1570,13 @@ int dsi_panel_device_register(struct device_node *pan_node,
 				gpio_free(ctrl_pdata->disp_en_gpio);
 			return -ENODEV;
 		}
+		gpio_direction_output(ctrl_pdata->rst_gpio, 1);
+                if (rc) {
+                        pr_err("set_direction for rst gpio failed, rc=%d\n",
+                               rc);
+                        gpio_free(ctrl_pdata->disp_en_gpio);
+                        return -ENODEV;
+                }
 	}
 
 	ctrl_pdata->disp_vsn_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
@@ -1642,61 +1606,73 @@ int dsi_panel_device_register(struct device_node *pan_node,
 			return -ENODEV;
 		}
 	}
-		ctrl_pdata->bl_outdoor_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
-				"qcom,platform-outdoor-gpio", 0);
 
-#if 1
-		if (!gpio_is_valid(ctrl_pdata->bl_outdoor_gpio)) {
-			pr_err("%s:%d, bl_outdoor_gpio gpio not specified\n",
-					__func__, __LINE__);
-		} else {
-			rc = gpio_request(ctrl_pdata->bl_outdoor_gpio, "bl_outdoor");
-			if (rc) {
-				pr_err("request bl outdoor gpio failed, rc=%d\n",
-						rc);
-				return -ENODEV;
-			}
+	ctrl_pdata->bl_outdoor_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			"qcom,platform-outdoor-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->bl_outdoor_gpio)) {
+		pr_err("%s:%d, bl_outdoor_gpio gpio not specified\n",
+				__func__, __LINE__);
+	} else {
+		rc = gpio_request(ctrl_pdata->bl_outdoor_gpio, "bl_outdoor");
+		if (rc) {
+			pr_err("request bl outdoor gpio failed, rc=%d\n",
+					rc);
+			return -ENODEV;
 		}
-#endif
-#ifdef ESD_FOR_LCD
+	}
+#else
+	if (!gpio_is_valid(ctrl_pdata->disp_en_gpio))
+		pr_err("%s:%d, Disp_en gpio not specified\n",
+						__func__, __LINE__);
+
+	if (pinfo->type == MIPI_CMD_PANEL) {
 		ctrl_pdata->disp_te_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
-				"qcom,platform-te-gpio", 0);
+						"qcom,platform-te-gpio", 0);
 		if (!gpio_is_valid(ctrl_pdata->disp_te_gpio)) {
 			pr_err("%s:%d, Disp_te gpio not specified\n",
-					__func__, __LINE__);
+						__func__, __LINE__);
+		}
+	}
+
+	if (gpio_is_valid(ctrl_pdata->disp_te_gpio) &&
+					pinfo->type == MIPI_CMD_PANEL) {
+		rc = gpio_request(ctrl_pdata->disp_te_gpio, "disp_te");
+		if (rc) {
+			pr_err("request TE gpio failed, rc=%d\n",
+			       rc);
+			return -ENODEV;
+		}
+		rc = gpio_tlmm_config(GPIO_CFG(
+				ctrl_pdata->disp_te_gpio, 1,
+				GPIO_CFG_INPUT,
+				GPIO_CFG_PULL_DOWN,
+				GPIO_CFG_2MA),
+				GPIO_CFG_ENABLE);
+
+		if (rc) {
+			pr_err("%s: unable to config tlmm = %d\n",
+				__func__, ctrl_pdata->disp_te_gpio);
+			gpio_free(ctrl_pdata->disp_te_gpio);
+			return -ENODEV;
 		}
 
-		if (gpio_is_valid(ctrl_pdata->disp_te_gpio)) {
-			rc = gpio_request(ctrl_pdata->disp_te_gpio, "disp_te");
-			if (rc) {
-				pr_err("request TE gpio failed, rc=%d\n",
-						rc);
-				gpio_free(ctrl_pdata->disp_te_gpio);
-				return -ENODEV;
-			}
-
-			INIT_DELAYED_WORK(&lcd_te_work, lcd_te_abnormal_handle);
-			init_timer(&te_timer);
-			te_timer.function = te_timer_handle;
-			ctrl_pdata->te_irq = gpio_to_irq(ctrl_pdata->disp_te_gpio);
-			rc = request_irq(ctrl_pdata->te_irq, lcd_te_irq_handle, IRQF_TRIGGER_RISING, "LCD_TE", ctrl_pdata);
-			if (rc) {
-				printk(KERN_ERR "lcd te request irq(%d) failure, rc = %d\n", ctrl_pdata->te_irq, rc);
-				return -1;
-			}
-			te_running = 0;
-			disable_irq(ctrl_pdata->te_irq);
-			printk("************************** te irq %d requested *******************************\n", ctrl_pdata->te_irq);
-
-			pr_debug("%s: te_gpio=%d\n", __func__,
+		rc = gpio_direction_input(ctrl_pdata->disp_te_gpio);
+		if (rc) {
+			pr_err("set_direction for disp_en gpio failed, rc=%d\n",
+			       rc);
+			gpio_free(ctrl_pdata->disp_te_gpio);
+			return -ENODEV;
+		}
+		pr_debug("%s: te_gpio=%d\n", __func__,
 					ctrl_pdata->disp_te_gpio);
+	}
 
-		}
+	ctrl_pdata->rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-reset-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
+		pr_err("%s:%d, reset gpio not specified\n",
+						__func__, __LINE__);
 #endif
-
-
-
-	pr_info("[DIS] DISPLAY_GPIO[ te: %d en: %d  rst: %d  vsp: %d  vsn: %d bl_outdoor: %d]", ctrl_pdata->disp_te_gpio ,ctrl_pdata->disp_en_gpio, ctrl_pdata->rst_gpio, ctrl_pdata->disp_vsp_gpio, ctrl_pdata->disp_vsn_gpio, ctrl_pdata->bl_outdoor_gpio);
 
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
 
@@ -1822,53 +1798,8 @@ static void __exit mdss_dsi_driver_cleanup(void)
 {
 	platform_driver_unregister(&mdss_dsi_ctrl_driver);
 }
-#define DSI0_PHY_BASE	0xfd922800
-#define DSI1_PHY_BASE	0xfd922e00
-#define DSI_REG_SIZE	0x600
-static void read_dsi_register(void)
-{
-	unsigned char *dsi0_base = NULL;
-	unsigned char *dsi1_base = NULL;
-	int i;
-
-	dsi0_base = ioremap(DSI0_PHY_BASE, DSI_REG_SIZE);
-	dsi1_base = ioremap(DSI1_PHY_BASE, DSI_REG_SIZE);
-
-	i = 0;
-	if (dsi0_base != NULL) {
-		for (i = 0; i < DSI_REG_SIZE / 4; i++) {
-			pr_info("DSI0: reg[%8x] 0x%8x\n", i * 4 + DSI0_PHY_BASE, MIPI_INP(dsi0_base + i * 4));
-		}
-
-		for (i = 0; i < DSI_REG_SIZE / 4; i++) {
-			pr_info("DSI1: reg[%8x] 0x%8x\n", i * 4 + DSI1_PHY_BASE, MIPI_INP(dsi1_base + i * 4));
-		}
-	}
-}
-static int read_dsi_func(const char *val, struct kernel_param *kp)
-{
-   int value;
-   int ret = param_set_int(val, kp); 
-
-   if(ret < 0) 
-   {    
-       pr_info("%s Invalid argument\n", __func__);
-       return -EINVAL;
-   }    
-   value = *((int*)kp->arg);
-   if (value) {
-       pr_info("prepare to read dsi register...\n");
-	   read_dsi_register();
-	   read_dsi = 1;
-   } else {
-	   read_dsi = 0;
-   } 
-   return 0;
-}
-
 module_exit(mdss_dsi_driver_cleanup);
 
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("DSI controller driver");
 MODULE_AUTHOR("Chandan Uddaraju <chandanu@codeaurora.org>");
-module_param_call(read_dsi, read_dsi_func, param_get_int, &read_dsi, S_IRUSR | S_IWUSR);

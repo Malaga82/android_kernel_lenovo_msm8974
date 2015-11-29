@@ -270,12 +270,8 @@ struct mdss_dsi_ctrl_pdata {
 	int panel_mode;
 	int irq_cnt;
 	int rst_gpio;
-	int te_irq;
 	int disp_en_gpio;
 	int disp_te_gpio;
-	int disp_vsp_gpio;
-	int disp_vsn_gpio;
-	int bl_outdoor_gpio;
 	int mode_gpio;
 	int disp_te_gpio_requested;
 	int bklt_ctrl;	/* backlight ctrl */
@@ -319,6 +315,12 @@ struct mdss_dsi_ctrl_pdata {
 	struct dsi_buf rx_buf;
 	struct dsi_buf status_buf;
 	int status_mode;
+
+#ifdef CONFIG_MACH_SHENQI_K9
+	int disp_vsp_gpio;
+	int disp_vsn_gpio;
+	int bl_outdoor_gpio;
+#endif
 };
 
 struct dsi_status_data {
