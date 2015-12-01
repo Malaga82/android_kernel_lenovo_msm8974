@@ -140,8 +140,6 @@ struct worker {
 	struct worker_pool	*pool;		/* I: the associated pool */
 	/* 64 bytes boundary on 64bit, 32 on 32bit */
 	unsigned long		last_active;	/* L: last active timestamp */
-	unsigned long		begin_work;	/* L: current work task begin timestamp */
-	unsigned long		end_work;	/* L: last work task end timestamp */
 	unsigned int		flags;		/* X: flags */
 	int			id;		/* I: worker id */
 	struct work_struct	rebind_work;	/* L: rebind worker to cpu */
@@ -1865,9 +1863,7 @@ __acquires(&gcwq->lock)
 	lock_map_acquire_read(&cwq->wq->lockdep_map);
 	lock_map_acquire(&lockdep_map);
 	trace_workqueue_execute_start(work);
-	worker->begin_work = jiffies;
 	f(work);
-	worker->end_work = jiffies;
 	/*
 	 * While we must be careful to not use "work" after this, the trace
 	 * point will only record its address.
