@@ -359,7 +359,7 @@ struct mdss_panel_info {
 	struct lvds_panel_info lvds;
 	struct edp_panel_info edp;
 
-    struct mdss_livedisplay_ctx *livedisplay;
+	struct mdss_livedisplay_ctx *livedisplay;
 };
 
 struct mdss_panel_data {

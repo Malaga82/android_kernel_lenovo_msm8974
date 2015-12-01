@@ -471,8 +471,8 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 	if (ctrl->on_cmds.cmd_cnt)
 		mdss_dsi_panel_cmds_send(ctrl, &ctrl->on_cmds);
 
-    mdss_livedisplay_update(ctrl, MODE_UPDATE_ALL);
-    
+	mdss_livedisplay_update(ctrl, MODE_UPDATE_ALL);
+
 	pr_debug("%s:-\n", __func__);
 	return 0;
 }
@@ -1220,7 +1220,7 @@ static int mdss_panel_parse_dt(struct device_node *np,
 		goto error;
 	}
 
-    mdss_livedisplay_parse_dt(np, pinfo);
+	mdss_livedisplay_parse_dt(np, pinfo);
 
 	return 0;
 
