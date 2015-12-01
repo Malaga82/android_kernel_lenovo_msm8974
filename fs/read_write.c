@@ -20,17 +20,6 @@
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
 
-#include <linux/statfs.h>
-#include <linux/mount.h>
-#include "mount.h"
-#include <linux/mmc/mmc.h>
-#include "low_storage.h"
-
-#ifdef LIMIT_SDCARD_SIZE
-long long  data_free_size_th = DATA_FREE_SIZE_TH_DEFAULT;
-#endif
-long long store = 0;
-
 const struct file_operations generic_ro_fops = {
 	.llseek		= generic_file_llseek,
 	.read		= do_sync_read,
@@ -431,63 +420,6 @@ EXPORT_SYMBOL(do_sync_write);
 ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
-#ifdef LIMIT_DATA_SIZE
-	struct kstatfs stat;
-	struct task_struct *tsk = current;
-	unsigned char num = 0;
-	struct mount *mount_data;
-	char *file_list[10] = {"xx_thread", NULL};
-#endif
-
-#ifdef LIMIT_DATA_SIZE
-       mount_data = real_mount(file->f_path.mnt);
-	if((mount_data)&&(mount_data->mnt_mountpoint)&&(mount_data->mnt_mountpoint->d_name.name))
-	{
-		if (!memcmp(mount_data->mnt_mountpoint->d_name.name, "data", 5)) {
-			//printk(KERN_ERR "write data  %s, %lld\n",file->f_path.dentry->d_name.name,store);
-			store -= count;
-			if (store  <= (CHECK_1TH*2)){
-				vfs_statfs(&file->f_path, &stat);
-				store = stat.f_bavail* stat.f_bsize;
-				//printk("[low storage] initialize data free size when acess data ,%llx\n",store);
-				if (store <= CHECK_2TH) {
-					store -= count;
-					for (; file_list[num] != NULL; num ++) {
-						if (!strcmp(tsk->comm, file_list[num]))
-							break;
-					}
-					if (file_list[num] == NULL) {
-					    printk("[low storage] wite data over flow, %llx\n",store);
-						store += count;
-						return -ENOSPC;
-					}
-				}
-			}
-		}
-	}
-#endif
-
-
-#ifdef LIMIT_SDCARD_SIZE
-       // store always come from write data, after fuse write, it will also come into data write.so store will be 
-	//if(!memcmp(mount_data->mnt_mountpoint->d_name.name, "emulated", 8)){
-	if((file->f_path.mnt)&&(file->f_path.mnt->mnt_sb)&&(file->f_path.mnt->mnt_sb->s_type->name)&&(file->f_path.mnt->mnt_sb->s_type->name)&&(file->f_path.mnt->mnt_sb->s_dev))
-	{
-		if((!memcmp(file->f_path.mnt->mnt_sb->s_type->name, "fuse", 5))  && (file->f_path.mnt->mnt_sb->s_dev==fuse_data_dev))
-		{
-			if((store-count) <= (data_free_size_th  + CHECK_1TH*2)){
-				vfs_statfs(&file->f_path, &stat);
-				if(stat.f_bavail== 0) //that mean less than reserved size
-				{
-					printk("[low storage] wite %s over flow,%llx\n",mount_data->mnt_mountpoint->d_name.name,store);
-					printk("[low storage] stat->free=%llx,available=%llx\n",stat.f_bfree,stat.f_bavail);
-					return -ENOSPC;
-				}
-			}
-		}
-	}
-#endif
-
 
 	if (!(file->f_mode & FMODE_WRITE))
 		return -EBADF;

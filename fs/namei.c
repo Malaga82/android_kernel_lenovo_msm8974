@@ -38,10 +38,6 @@
 #include "internal.h"
 #include "mount.h"
 
-#include "low_storage.h"
-#include <linux/statfs.h>
-#include <linux/dcache.h>
-#include <linux/genhd.h>
 /* [Feb-1997 T. Schoebel-Theuer]
  * Fundamental changes in the pathname lookup mechanisms (namei)
  * were necessary because of omirr.  The reason is that omirr needs
@@ -2063,13 +2059,6 @@ void unlock_rename(struct dentry *p1, struct dentry *p2)
 int vfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 		struct nameidata *nd)
 {
-#ifdef LIMIT_DATA_SIZE
-
-	struct super_block *mnt_sb;
-	struct kstatfs stat;
-	char *file_list[10] = {"xx_thread", NULL};
-	int num = 0;
-#endif
 	int error = may_create(dir, dentry);
 
 	if (error)
@@ -2077,47 +2066,6 @@ int vfs_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 
 	if (!dir->i_op->create)
 		return -EACCES;	/* shouldn't it be ENOSYS? */
-#ifdef LIMIT_DATA_SIZE
-	mnt_sb = dentry->d_sb;
-	if((mnt_sb)&&(mnt_sb->s_bdev)&&(mnt_sb->s_bdev->bd_part)&&(mnt_sb->s_bdev->bd_part->info)&&(mnt_sb->s_bdev->bd_part->info->volname))
-	{
-
-		if(!memcmp(mnt_sb->s_bdev->bd_part->info->volname,"userdata",8))
-		{
-			if (store  <= CHECK_1TH)
-			{
-				vfs_ustat(mnt_sb->s_dev,&stat);
-				store = stat.f_bavail* stat.f_bsize;
-				printk("[low storage] initialize data free size 0x%llx when create %s \n",store,dentry->d_name.name);
-				if (store <= CHECK_2TH) {
-					for (; file_list[num] != NULL; num ++) {
-					if (!strcmp(current->comm, file_list[num]))
-					break;
-					}
-				if (file_list[num] == NULL) {
-					printk("[low storage] create %s by %s fail, because data have no space\n",dentry->d_name.name,current->comm);
-					return -ENOSPC;
-					}
-				}
-			}
-		}
-	}
-#endif
-#ifdef LIMIT_SDCARD_SIZE
-	if((mnt_sb)&&(mnt_sb->s_type)&&(mnt_sb->s_type->name)&&(mnt_sb->s_dev))
-	{
-		if((!memcmp(mnt_sb->s_type->name, "fuse", 5)) && (mnt_sb->s_dev==fuse_data_dev))
-		{
-			if(store <= (data_free_size_th  + CHECK_1TH*2)){
-	                   vfs_ustat(mnt_sb->s_dev,&stat);
-				if (stat.f_bavail==0) {
-				printk("[low storage] fuse create %s by %s fail, because data have no space\n",dentry->d_name.name,current->comm);
-				return -ENOSPC;
-				}
-			}
-		}
-	}
-#endif
 	mode &= S_IALLUGO;
 	mode |= S_IFREG;
 	error = security_inode_create(dir, dentry, mode);
@@ -2691,33 +2639,13 @@ int vfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 {
 	int error = may_create(dir, dentry);
 	unsigned max_links = dir->i_sb->s_max_links;
-#ifdef LIMIT_SDCARD_SIZE
-	struct super_block *mnt_sb;
-	struct kstatfs stat;
-#endif
+
 	if (error)
 		return error;
 
 	if (!dir->i_op->mkdir)
 		return -EPERM;
 
-#ifdef LIMIT_SDCARD_SIZE
-	mnt_sb = dentry->d_sb;
-	if((mnt_sb)&&(mnt_sb->s_type)&&(mnt_sb->s_type->name)&&(mnt_sb->s_dev))
-	{
-		if((!memcmp(mnt_sb->s_type->name, "fuse", 5)) && (mnt_sb->s_dev==fuse_data_dev))
-		{
-			//printk(KERN_ERR "[Low_storage]vfs_mkdir fuse %s, store=%lld, %lld\n",dentry->d_name.name,store,(data_free_size_th  + CHECK_1TH*2));
-			if(store <= (data_free_size_th  + CHECK_1TH*2)){
-				vfs_ustat(mnt_sb->s_dev,&stat);
-				if (stat.f_bavail==0) {
-					printk("[low storage] fuse mkdir %s by %s fail, because data have no space\n",dentry->d_name.name,current->comm);	
-					return -ENOSPC;
-				}
-			}
-		}
-	}
-#endif
 	mode &= (S_IRWXUGO|S_ISVTX);
 	error = security_inode_mkdir(dir, dentry, mode);
 	if (error)
