@@ -2519,9 +2519,6 @@ static void dwc3_gadget_phy_suspend(struct dwc3 *dwc, u8 speed)
 	}
 }
 
-extern int dis_usb30;
-extern int is_usb30_plugin;
-extern void enable_ext_usb_driver(int enable);
 static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 {
 	struct dwc3_gadget_ep_cmd_params params;
@@ -2542,12 +2539,6 @@ static void dwc3_gadget_conndone_interrupt(struct dwc3 *dwc)
 
 	switch (speed) {
 	case DWC3_DCFG_SUPERSPEED:
-		if(dis_usb30 == 1)
-		{
-			enable_ext_usb_driver(0);
-			is_usb30_plugin = 1;
-			return;
-		}
 		/*
 		 * WORKAROUND: DWC3 revisions <1.90a have an issue which
 		 * would cause a missing USB3 Reset event.

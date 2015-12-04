@@ -41,7 +41,6 @@
 #include <linux/qpnp/qpnp-adc.h>
 #include <linux/cdev.h>
 #include <linux/completion.h>
-#include <linux/of_gpio.h>
 
 #include <mach/rpm-regulator.h>
 #include <mach/rpm-regulator-smd.h>
@@ -53,9 +52,6 @@
 #include "gadget.h"
 #include "debug.h"
 
-
-int is_usb30_plugin = 0;
-module_param(is_usb30_plugin,int,0644);
 /* ADC threshold values */
 static int adc_low_threshold = 700;
 module_param(adc_low_threshold, int, S_IRUGO | S_IWUSR);
@@ -78,7 +74,7 @@ module_param(ss_phy_override_deemphasis, int, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(ss_phy_override_deemphasis, "Override SSPHY demphasis value");
 
 /* Enable Proprietary charger detection */
-static bool prop_chg_detect = true;
+static bool prop_chg_detect;
 module_param(prop_chg_detect, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(prop_chg_detect, "Enable Proprietary charger detection");
 
@@ -209,7 +205,6 @@ struct dwc3_msm {
 	int			hs_phy_irq;
 	int			hsphy_init_seq;
 	int			deemphasis_val;
-	int			ext_redriver_en_gpio;
 	bool			lpm_irq_seen;
 	struct delayed_work	resume_work;
 	struct work_struct	restart_usb_work;
@@ -1802,12 +1797,9 @@ static void dwc3_chg_detect_work(struct work_struct *w)
 			 * Detect floating charger only if propreitary
 			 * charger detection is enabled.
 			 */
-			if (!dcd && prop_chg_detect){
-				/*mdwc->charger.chg_type =*/
-						/*DWC3_FLOATED_CHARGER;*/
+			if (!dcd && prop_chg_detect)
 				mdwc->charger.chg_type =
-						DWC3_DCP_CHARGER;//wyh
-			}
+						DWC3_FLOATED_CHARGER;
 			else
 				mdwc->charger.chg_type = DWC3_SDP_CHARGER;
 			mdwc->chg_state = USB_CHG_STATE_DETECTED;
@@ -1870,7 +1862,6 @@ static void dwc3_start_chg_det(struct dwc3_charger *charger, bool start)
 	queue_delayed_work(system_nrt_wq, &mdwc->chg_work, 0);
 }
 
-void enable_ext_usb_driver(int enable);
 static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 {
 	int ret;
@@ -2006,7 +1997,6 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc)
 		dwc3_hsusb_config_vddcx(mdwc, 0);
 	pm_relax(mdwc->dev);
 	atomic_set(&mdwc->in_lpm, 1);
-	enable_ext_usb_driver(0);//disable ext usb redriver ic when usb suspend
 
 	dev_info(mdwc->dev, "DWC3 in low power mode\n");
 
@@ -2040,7 +2030,6 @@ static int dwc3_msm_resume(struct dwc3_msm *mdwc)
 		return 0;
 	}
 
-	enable_ext_usb_driver(1);//enable ext usb redriver ic when usb resume
 	pm_stay_awake(mdwc->dev);
 
 	if (mdwc->lpm_flags & MDWC3_PHY_REF_AND_CORECLK_OFF)
@@ -2858,7 +2847,6 @@ unreg_chrdev:
 	return ret;
 }
 
-struct dwc3_msm *tmp_mdwc = NULL;
 static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 {
 	struct device_node *node = pdev->dev.of_node;
@@ -3208,26 +3196,14 @@ static int __devinit dwc3_msm_probe(struct platform_device *pdev)
 				 &mdwc->qdss_tx_fifo_size))
 		dev_err(&pdev->dev,
 			"unable to read platform data qdss tx fifo size\n");
-	tmp_mdwc = mdwc;
-	mdwc->ext_redriver_en_gpio = of_get_named_gpio_flags(node,
-			"qcom,ext_redriver_en_gpio", 0, NULL);
-	ret = gpio_request(mdwc->ext_redriver_en_gpio,
-			"ext_redriver_en_gpio");
-	if (ret) {
-		printk("ext_redriver_en_gpio request error %d\n",ret);
-	}
 
-	ret = gpio_direction_output(mdwc->ext_redriver_en_gpio, 1);
-	if (ret) {
-		printk("ext_redriver_en_gpio set output error %d\n",ret);
-	}
-	gpio_set_value(mdwc->ext_redriver_en_gpio,0);//disable ext redriver default
+	prop_chg_detect = of_property_read_bool(node, "qcom,prop-chg-detect");
 
 	dwc3_set_notifier(&dwc3_msm_notify_event);
 	/* usb_psy required only for vbus_notifications or charging support */
 	if (mdwc->ext_xceiv.otg_capability ||
 			!mdwc->charger.charging_disabled) {
-		mdwc->usb_psy.name = "usb_qpnp";
+		mdwc->usb_psy.name = "usb";
 		mdwc->usb_psy.type = POWER_SUPPLY_TYPE_USB;
 		mdwc->usb_psy.supplied_to = dwc3_msm_pm_power_supplied_to;
 		mdwc->usb_psy.num_supplicants = ARRAY_SIZE(
@@ -3493,27 +3469,6 @@ static int dwc3_msm_runtime_idle(struct device *dev)
 
 	return 0;
 }
-
-int dis_usb30 = 1;
-void enable_ext_usb_driver(int enable)
-{
-	gpio_set_value(tmp_mdwc->ext_redriver_en_gpio,enable);//dusable ext redriver
-}
-static int dis_usb30_func(const char *s, struct kernel_param *kp)
-{
-	if(!strncmp(s,"1",1))
-	{
-		dis_usb30 = 1;
-	}else
-	{
-		dis_usb30 = 0;
-	}
-			
-	if(tmp_mdwc != NULL)
-		enable_ext_usb_driver(!dis_usb30);
-	return 0;
-}
-module_param_call(dis_usb30,dis_usb30_func,param_get_int,&dis_usb30,0644);
 
 static int dwc3_msm_runtime_suspend(struct device *dev)
 {

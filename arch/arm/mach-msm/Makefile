@@ -8,10 +8,6 @@ obj-y += clock.o clock-voter.o clock-dummy.o clock-generic.o
 obj-y += modem_notifier.o
 obj-$(CONFIG_USE_OF) += board-dt.o
 
-# Add user defined sysfs
-obj-y += user_sysfs_private.o
-obj-y += user_sysfs_debug.o
-
 obj-$(CONFIG_DEBUG_FS) += nohlt.o clock-debug.o
 obj-$(CONFIG_KEXEC) += msm_kexec.o
 
