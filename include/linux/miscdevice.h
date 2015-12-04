@@ -37,7 +37,6 @@
 #define UINPUT_MINOR		223
 #define HPET_MINOR		228
 #define FUSE_MINOR		229
-#define LEFUSE_MINOR		230
 #define KVM_MINOR		232
 #define BTRFS_MINOR		234
 #define AUTOFS_MINOR		235
