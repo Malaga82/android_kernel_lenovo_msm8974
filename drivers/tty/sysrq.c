@@ -184,17 +184,6 @@ static struct sysrq_key_op sysrq_mountro_op = {
 	.enable_mask	= SYSRQ_ENABLE_REMOUNT,
 };
 
-static void sysrq_handle_androidreboot_log(int key)
-{
-	printk("android_reboot call:pid=%d,comm=%s\n",current->pid,current->comm);
-}
-static struct sysrq_key_op sysrq_rebootlog_op = {
-	.handler	= sysrq_handle_androidreboot_log,
-	.help_msg	= "rebootlogV",
-	.action_msg	= "android reboot log",
-	.enable_mask	= SYSRQ_ENABLE_BOOT,
-};
-
 #ifdef CONFIG_LOCKDEP
 static void sysrq_handle_showlocks(int key)
 {
@@ -465,7 +454,7 @@ static struct sysrq_key_op *sysrq_key_table[36] = {
 	/* x: May be registered on ppc/powerpc for xmon */
 	NULL,				/* x */
 	/* y: May be registered on sparc64 for global register dump */
-	&sysrq_rebootlog_op,				/* y */
+	NULL,				/* y */
 	&sysrq_ftrace_dump_op,		/* z */
 };
 
