@@ -88,7 +88,6 @@ void *buf_hdlc;
 module_param(itemsize, uint, 0);
 module_param(poolsize, uint, 0);
 module_param(max_clients, uint, 0);
-dev_t diagdev_bak;
 
 /* delayed_rsp_id 0 represents no delay in the response. Any other number
     means that the diag packet has a delayed response. */
@@ -909,7 +908,6 @@ int diag_switch_logging(unsigned long ioarg)
 				pr_err("socket process, status: %d\n",
 					status);
 			}
-			driver->socket_process = NULL;
 		}
 	} else if (driver->logging_mode == SOCKET_MODE) {
 		driver->socket_process = current;
@@ -2031,7 +2029,6 @@ static const struct file_operations diagcharfops = {
 	.release = diagchar_close
 };
 
-extern int is_testmode;
 static int diagchar_setup_cdev(dev_t devno)
 {
 
@@ -2055,10 +2052,6 @@ static int diagchar_setup_cdev(dev_t devno)
 		printk(KERN_ERR "Error creating diagchar class.\n");
 		return -1;
 	}
-	if(is_testmode == 0){
-		diagdev_bak = devno;
-		return 0;
-	}
 
 	driver->diag_dev = device_create(driver->diagchar_class, NULL, devno,
 					 (void *)driver, "diag");
@@ -2069,33 +2062,6 @@ static int diagchar_setup_cdev(dev_t devno)
 	driver->diag_dev->power.wakeup = wakeup_source_register("DIAG_WS");
 	return 0;
 
-}
-/*
-	The diag device created by usb function.
-*/
-int diagchar_dev_create(void)
-{
-	if(!diagdev_bak)
-		return -1;
-
-	driver->diag_dev = device_create(driver->diagchar_class, NULL, diagdev_bak,
-					 (void *)driver, "diag");
-	if (!driver->diag_dev)
-		return -EIO;
-
-	driver->diag_dev->power.wakeup = wakeup_source_register("DIAG_WS");
-	return 0;
-}
-void diagchar_dev_delete(void)
-{
-	if (driver) {
-		if (driver->cdev) {
-			/* TODO - Check if device exists before deleting */
-			device_destroy(driver->diagchar_class,
-				       MKDEV(driver->major,
-					     driver->minor_start));
-		}
-	}
 }
 
 static int diagchar_cleanup(void)

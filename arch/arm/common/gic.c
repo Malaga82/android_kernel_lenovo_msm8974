@@ -238,8 +238,6 @@ extern int msm_show_resume_irq_mask;
 
 static void gic_show_resume_irq(struct gic_chip_data *gic)
 {
-	//yangjq, 20130619, Add log to show wakeup interrupts
-	extern int save_irq_wakeup_gpio(int irq, int gpio);
 	unsigned int i;
 	u32 enabled;
 	unsigned long pending[32];
@@ -259,11 +257,8 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 	for (i = find_first_bit(pending, gic->max_irq);
 	     i < gic->max_irq;
 	     i = find_next_bit(pending, gic->max_irq, i+1)) {
-		pr_warning("%s: %d triggered\n", __func__,
+		pr_warning("%s: %d triggered", __func__,
 					i + gic->irq_offset);
-
-		//yangjq, 20130619, Add log to show wakeup interrupts
-		save_irq_wakeup_gpio(i + gic->irq_offset, 0);
 	}
 }
 
