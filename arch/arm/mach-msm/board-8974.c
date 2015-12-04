@@ -49,7 +49,7 @@
 #include "modem_notifier.h"
 #include "platsmp.h"
 /* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, START */
-#include "lephone_nv.h"
+#include "k9/shenqi_nv.h"
 /* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, END */
 
 
@@ -177,7 +177,7 @@ void __init msm8974_init(void)
 	msm8974_add_drivers();
 
     /* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, START */
-    lephone_nv_init();
+    shenqi_nv_init();
     /* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, END */
 
 }
