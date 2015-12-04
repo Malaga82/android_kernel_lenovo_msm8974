@@ -559,7 +559,7 @@ static struct edge_to_pid edge_to_pids[] = {
 	[SMD_QDSP_Q6FW] = {SMD_Q6, SMD_MODEM_Q6_FW},
 	[SMD_DSPS_Q6FW] = {SMD_DSPS, SMD_MODEM_Q6_FW},
 	[SMD_WCNSS_Q6FW] = {SMD_WCNSS, SMD_MODEM_Q6_FW},
-	[SMD_APPS_RPM] = {SMD_APPS, SMD_RPM, "rpm"},
+	[SMD_APPS_RPM] = {SMD_APPS, SMD_RPM},
 	[SMD_MODEM_RPM] = {SMD_MODEM, SMD_RPM},
 	[SMD_QDSP_RPM] = {SMD_Q6, SMD_RPM},
 	[SMD_WCNSS_RPM] = {SMD_WCNSS, SMD_RPM},
@@ -2716,11 +2716,8 @@ static irqreturn_t smsm_irq_handler(int irq, void *data)
 				modem_queue_smsm_init_notify();
 			}
 
-			if (modm & SMSM_SMDINIT) {
+			if (modm & SMSM_SMDINIT)
 				apps |= SMSM_SMDINIT;
-				//yangjq, 2014-8-14, Allocate share memory for smem_dmesg after modem's initialization
-				modem_queue_smsm_smdinit_notify();
-			}
 			if ((apps & (SMSM_INIT | SMSM_SMDINIT | SMSM_RPCINIT)) ==
 				(SMSM_INIT | SMSM_SMDINIT | SMSM_RPCINIT))
 				apps |= SMSM_RUN;
