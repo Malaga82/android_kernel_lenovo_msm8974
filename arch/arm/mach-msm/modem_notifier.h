@@ -23,8 +23,6 @@
 #define MODEM_NOTIFIER_START_RESET 0x1
 #define MODEM_NOTIFIER_END_RESET 0x2
 #define MODEM_NOTIFIER_SMSM_INIT 0x3
-//yangjq, 2014-8-14, Allocate share memory for smem_dmesg after modem's initialization
-#define MODEM_NOTIFIER_SMSM_SMDINIT 0x4
 
 extern int modem_register_notifier(struct notifier_block *nb);
 extern int modem_unregister_notifier(struct notifier_block *nb);
@@ -32,8 +30,6 @@ extern void modem_notify(void *data, unsigned int state);
 extern void modem_queue_start_reset_notify(void);
 extern void modem_queue_end_reset_notify(void);
 extern void modem_queue_smsm_init_notify(void);
-//yangjq, 2014-8-14, Allocate share memory for smem_dmesg after modem's initialization
-extern void modem_queue_smsm_smdinit_notify(void);
 extern int __init msm_init_modem_notifier_list(void);
 
 #endif /* _MODEM_NOTIFIER_H */
