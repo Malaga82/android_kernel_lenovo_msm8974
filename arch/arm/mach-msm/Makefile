@@ -277,6 +277,7 @@ obj-$(CONFIG_ARCH_MSM9615) += clock-local.o clock-9615.o acpuclock-9615.o clock-
 obj-$(CONFIG_ARCH_APQ8084) += board-8084.o board-8084-gpiomux.o
 obj-$(CONFIG_ARCH_APQ8084) += clock-8084.o
 ifdef CONFIG_MACH_SHENQI_K9
+obj-$(CONFIG_MACH_SHENQI_K9) += k9/
 obj-$(CONFIG_MSM_SECBOOT) += msm_secboot.o
 endif
 obj-$(CONFIG_ARCH_MSM8974) += board-8974.o board-8974-gpiomux.o
@@ -410,8 +411,6 @@ obj-$(CONFIG_DEBUG_FS) += msm_cpr-debug.o
 endif
 obj-$(CONFIG_MSM_FIQ) += msm7k_fiq.o
 obj-$(CONFIG_MSM_FIQ) += msm7k_fiq_handler.o
-
-obj-y += lephone_nv.o
 
 obj-$(CONFIG_MEMORY_HOLE_CARVEOUT) +=  msm_mem_hole.o
 
