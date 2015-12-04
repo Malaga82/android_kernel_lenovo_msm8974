@@ -49,10 +49,10 @@ static struct gpiomux_setting mdm2ap_errfatal_cfg = {
 };
 
 static struct gpiomux_setting mdm2ap_pblrdy = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_NONE,
-	.dir = GPIOMUX_IN,
+    .func = GPIOMUX_FUNC_GPIO,
+    .drv = GPIOMUX_DRV_2MA,
+    .pull = GPIOMUX_PULL_NONE,
+    .dir = GPIOMUX_IN,
 };
 
 
@@ -114,12 +114,12 @@ static struct msm_gpiomux_config mdm_configs[] __initdata = {
 		}
 	},
 	/* MDM2AP_PBL_READY*/
-	{
-		.gpio = 80,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &mdm2ap_pblrdy,
-		}
-	},
+    {
+        .gpio = 80,
+        .settings = {
+            [GPIOMUX_SUSPENDED] = &mdm2ap_pblrdy,
+        }
+    },
 };
 
 static struct gpiomux_setting gpio_uart_config = {
@@ -135,12 +135,13 @@ static struct gpiomux_setting slimbus = {
 	.pull = GPIOMUX_PULL_KEEPER,
 };
 
-/*ljk disable spi*/
+
+
 static struct gpiomux_setting cam_settings[] = {
 	{
 		.func = GPIOMUX_FUNC_1, /*active 1*/ /* 0 */
 		.drv = GPIOMUX_DRV_2MA,
-		.pull = GPIOMUX_PULL_NONE,
+    	.pull = GPIOMUX_PULL_NONE,
 	},
 	{
 		.func = GPIOMUX_FUNC_1, /*suspend*/ /* 1 */
@@ -156,14 +157,13 @@ static struct gpiomux_setting cam_settings[] = {
 		.func = GPIOMUX_FUNC_GPIO, /*active 0*/ /* 3 */
 		.drv = GPIOMUX_DRV_2MA,
 		.pull = GPIOMUX_PULL_NONE,
-	},
-	{
+    },
+    {
 		.func = GPIOMUX_FUNC_GPIO, /*suspend 0*/ /* 4 */
 		.drv = GPIOMUX_DRV_2MA,
 		.pull = GPIOMUX_PULL_DOWN,
 	},
 };
-/*+end*/
 
 #define QUAT_MI2S_ENABLE
 #ifdef QUAT_MI2S_ENABLE
@@ -217,7 +217,6 @@ static struct msm_gpiomux_config msm8974_quat_mi2s_configs[] __initdata = {
     },
 };
 #endif
-
 #if defined(CONFIG_KS8851) || defined(CONFIG_KS8851_MODULE)
 static struct gpiomux_setting gpio_eth_config = {
 	.pull = GPIOMUX_PULL_UP,
@@ -232,10 +231,8 @@ static struct gpiomux_setting gpio_spi_cs2_config = {
 };
 
 static struct gpiomux_setting gpio_spi_config = {
-/*ljk disable spi*/
 		.func = GPIOMUX_FUNC_GPIO, /*active 0*/ /* 3 */
 		.drv = GPIOMUX_DRV_2MA,
-/*+end*/
 	.pull = GPIOMUX_PULL_NONE,
 };
 static struct gpiomux_setting gpio_spi_susp_config = {
@@ -287,7 +284,6 @@ static struct gpiomux_setting gpio_epm_marker_config = {
 	.pull = GPIOMUX_PULL_NONE,
 	.dir = GPIOMUX_OUT_HIGH,
 };
-
 static struct gpiomux_setting wcnss_5wire_suspend_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv  = GPIOMUX_DRV_2MA,
@@ -414,7 +410,6 @@ static struct gpiomux_setting lcd_vsn_suspend_cfg = {
 	.dir = GPIOMUX_OUT_LOW,
 };
 #endif
-
 static struct gpiomux_setting lcd_id_active_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv  = GPIOMUX_DRV_2MA,
@@ -455,7 +450,7 @@ static struct gpiomux_setting lcd_outdoor_suspend_cfg = {
 	.dir = GPIOMUX_OUT_LOW,
 };
 
-#if 0 /* del by audio */
+#if 0 /* Deleted by audio */
 static struct gpiomux_setting atmel_resout_sus_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_6MA,
@@ -514,7 +509,7 @@ static struct msm_gpiomux_config hap_lvl_shft_config[] __initdata = {
 	},
 };
 
-#if 0 /* del by audio */
+#if 0 /* deleted by audio */
 static struct msm_gpiomux_config msm_touch_configs[] __initdata = {
 	{
 		.gpio      = 60,		/* TOUCH RESET */
@@ -554,16 +549,16 @@ static struct gpiomux_setting hsic_hub_act_cfg = {
 };
 
 static struct gpiomux_setting hsic_resume_act_cfg = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN,
-	.dir = GPIOMUX_OUT_LOW,
+    .func = GPIOMUX_FUNC_GPIO,
+    .drv = GPIOMUX_DRV_2MA,
+    .pull = GPIOMUX_PULL_DOWN,
+    .dir = GPIOMUX_OUT_LOW,
 };
 
 static struct gpiomux_setting hsic_resume_susp_cfg = {
-	.func = GPIOMUX_FUNC_GPIO,
-	.drv = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_NONE,
+    .func = GPIOMUX_FUNC_GPIO,
+    .drv = GPIOMUX_DRV_2MA,
+    .pull = GPIOMUX_PULL_NONE,
 };
 
 static struct msm_gpiomux_config msm_hsic_configs[] = {
@@ -581,13 +576,13 @@ static struct msm_gpiomux_config msm_hsic_configs[] = {
 			[GPIOMUX_SUSPENDED] = &hsic_sus_cfg,
 		},
 	},
-	{
-		.gpio = 80,
-		.settings = {
-			[GPIOMUX_ACTIVE] = &hsic_resume_act_cfg,
-			[GPIOMUX_SUSPENDED] = &hsic_resume_susp_cfg,
-		},
-	},
+    {
+        .gpio = 80,
+        .settings = {
+            [GPIOMUX_ACTIVE] = &hsic_resume_act_cfg,
+            [GPIOMUX_SUSPENDED] = &hsic_resume_susp_cfg,
+        },
+    },
 };
 
 static struct msm_gpiomux_config msm_hsic_hub_configs[] = {
@@ -967,7 +962,7 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 			[GPIOMUX_SUSPENDED] = &tfa9890_i2c_dat_cfg,
 		},
 	},
-	{
+    {
 		.gpio      = 26,		/* BLSP5 QUP5 I2C_CLK */
 		.settings = {
 			[GPIOMUX_ACTIVE] = &tfa9890_i2c_clk_cfg,
@@ -991,7 +986,6 @@ static struct msm_gpiomux_config msm8974_slimbus_config[] __initdata = {
 	},
 };
 
-/*+ljk change spi to camera config*/
 #if 0
 static struct gpiomux_setting cam_settings[] = {
 	{
@@ -1025,7 +1019,6 @@ static struct gpiomux_setting cam_settings[] = {
 	},
 };
 #endif
-/*+end*/
 
 static struct gpiomux_setting sd_card_det_active_config = {
 	.func = GPIOMUX_FUNC_GPIO,
@@ -1380,13 +1373,13 @@ static struct msm_gpiomux_config msm8974_sec_auxpcm_configs[] __initdata = {
 			[GPIOMUX_ACTIVE] = &auxpcm_act_cfg,
 		},
 	},
-	{
-		.gpio = 80,
-		.settings = {
-			[GPIOMUX_SUSPENDED] = &auxpcm_sus_cfg,
-			[GPIOMUX_ACTIVE] = &auxpcm_act_cfg,
-		},
-	},
+    {
+        .gpio = 80,
+        .settings = {
+            [GPIOMUX_SUSPENDED] = &auxpcm_sus_cfg,
+            [GPIOMUX_ACTIVE] = &auxpcm_act_cfg,
+        },
+    },
 	{
 		.gpio = 81,
 		.settings = {
@@ -1717,7 +1710,6 @@ static struct msm_gpiomux_config hw_ver_det_config[] __initdata = {
 		},
 	},
 };
-
 void __init msm_8974_init_gpiomux(void)
 {
 	int rc;
@@ -1750,7 +1742,7 @@ void __init msm_8974_init_gpiomux(void)
 			ARRAY_SIZE(msm8974_slimbus_config));
 
 	msm_gpiomux_install(msm_r63319_configs, ARRAY_SIZE(msm_r63319_configs));
-#if 0/* del by audio */
+#if 0 /* Deleted by audio */
 	msm_gpiomux_install(msm_touch_configs, ARRAY_SIZE(msm_touch_configs));
 #endif
 		msm_gpiomux_install(hap_lvl_shft_config,
@@ -1813,13 +1805,11 @@ void __init msm_8974_init_gpiomux(void)
 	if (of_board_is_dragonboard() && machine_is_apq8074())
 		msm_gpiomux_install(apq8074_dragonboard_ts_config,
 			ARRAY_SIZE(apq8074_dragonboard_ts_config));
-
-	msm_gpiomux_install(hw_ver_det_config,
-		ARRAY_SIZE(hw_ver_det_config));
-
+    msm_gpiomux_install(hw_ver_det_config,
+        ARRAY_SIZE(hw_ver_det_config));
 #ifdef QUAT_MI2S_ENABLE
-    msm_gpiomux_install(msm8974_quat_mi2s_configs,
-            ARRAY_SIZE(msm8974_quat_mi2s_configs));
+		msm_gpiomux_install(msm8974_quat_mi2s_configs,
+			ARRAY_SIZE(msm8974_quat_mi2s_configs));
 #endif
 }
 

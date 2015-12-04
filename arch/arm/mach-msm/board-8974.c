@@ -52,26 +52,7 @@
 #include "lephone_nv.h"
 /* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, END */
 
-/*liuyh hall sensor start*/
-#include <linux/kernel.h>
-#include <linux/platform_device.h>
-/*liuyh hall sensor end*/
-/*liuyh hall sensor start*/
-static struct platform_device msm_hall_switch = {
-	.name      = "msm_hall_switch",
-};
 
-
-static struct platform_device *hall_devices_evb[] __initdata = {
-        &msm_hall_switch,
-};
-
-void __init msm_hall_init(void)
-{
-	platform_add_devices(hall_devices_evb, ARRAY_SIZE(hall_devices_evb));
-
-}
-/*liuyh hall sensor end*/
 static struct memtype_reserve msm8974_reserve_table[] __initdata = {
 	[MEMTYPE_SMI] = {
 	},
@@ -128,9 +109,6 @@ void __init msm8974_add_drivers(void)
 		msm_clock_init(&msm8974_clock_init_data);
 	tsens_tm_init_driver();
 	msm_thermal_device_init();
-	/*liuyh hall sensor start*/
-	msm_hall_init();
-	/*liuyh hall sensor end*/
 }
 
 static struct of_dev_auxdata msm_hsic_host_adata[] = {
