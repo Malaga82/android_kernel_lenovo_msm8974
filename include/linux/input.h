@@ -473,6 +473,10 @@ struct input_keymap_entry {
 
 #define KEY_MICMUTE		248	/* Mute / unmute the microphone */
 
+#define KEY_NAVI_RIGHT  249
+#define KEY_NAVI_LEFT   254
+#define KEY_FNGR_DETECT 0x2e8
+
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
 #define BTN_MISC		0x100
