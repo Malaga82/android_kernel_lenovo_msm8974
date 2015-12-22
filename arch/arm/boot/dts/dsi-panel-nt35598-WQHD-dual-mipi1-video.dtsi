@@ -13,6 +13,7 @@
 &mdss_mdp {
 		dsi_boe_nt35598_WQHD_vid1: qcom,mdss_dsi_nt35598_WQHD_dual_mipi1_video {
 		/*compatible = "qcom,mdss-dsi-panel";*/
+		qcom,cont-splash-enabled;
 		qcom,mdss-dsi-panel-name = "BOE WQHD video mode dsi panel 1";
 		qcom,mdss-dsi-panel-controller = <&mdss_dsi1>;
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";

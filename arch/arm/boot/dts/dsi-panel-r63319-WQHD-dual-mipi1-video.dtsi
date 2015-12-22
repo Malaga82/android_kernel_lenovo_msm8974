@@ -12,6 +12,7 @@
 
 &mdss_mdp {
 		dsi_lgd_r63319_WQHD_vid1: qcom,mdss_dsi_r63319_WQHD_dual_mipi1_video {
+		qcom,cont-splash-enabled;
 		qcom,mdss-dsi-panel-name = "LGD WQHD video mode dsi panel 1";
 		qcom,mdss-dsi-panel-controller = <&mdss_dsi1>;
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
