@@ -12,7 +12,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-
+#define DEBUG
 #include <linux/module.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
@@ -33,9 +33,7 @@ static void dwc3_otg_reset(struct dwc3_otg *dotg);
 
 static void dwc3_otg_notify_host_mode(struct usb_otg *otg, int host_mode);
 static void dwc3_otg_reset(struct dwc3_otg *dotg);
-#ifdef CONFIG_BATTERY_BQ27530
 extern void bq24192_update_chrg_type(int type);
-#endif
 
 /**
  * dwc3_otg_set_host_regs - reset dwc3 otg registers to host operation.
@@ -179,6 +177,7 @@ static void dwc3_otg_set_peripheral_regs(struct dwc3_otg *dotg)
 	}
 }
 
+extern void otg_func_set(bool enable);
 /**
  * dwc3_otg_start_host -  helper function for starting/stoping the host controller driver.
  *
@@ -248,7 +247,7 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 			dwc3_otg_notify_host_mode(otg, 0);
 			return ret;
 		}
-
+		otg_func_set(true);
 		/* re-init OTG EVTEN register as XHCI reset clears it */
 		if (ext_xceiv && !ext_xceiv->otg_capability)
 			dwc3_otg_reset(dotg);
@@ -260,6 +259,7 @@ static int dwc3_otg_start_host(struct usb_otg *otg, int on)
 			dev_err(otg->phy->dev, "unable to disable vbus_otg\n");
 			return ret;
 		}
+		otg_func_set(false);
 		dwc3_otg_notify_host_mode(otg, on);
 
 		platform_device_del(dwc->xhci);
@@ -555,7 +555,7 @@ static int dwc3_otg_set_power(struct usb_phy *phy, unsigned mA)
 			dotg->charger->chg_type == DWC3_PROPRIETARY_CHARGER)
 		power_supply_type = POWER_SUPPLY_TYPE_USB_DCP;
 	else
-		power_supply_type = POWER_SUPPLY_TYPE_UNKNOWN;
+		power_supply_type = POWER_SUPPLY_TYPE_BATTERY;
 
 	power_supply_set_supply_type(dotg->psy, power_supply_type);
 
@@ -566,11 +566,7 @@ static int dwc3_otg_set_power(struct usb_phy *phy, unsigned mA)
 		return 0;
 
 	dev_info(phy->dev, "Avail curr from USB = %u\n", mA);
-
-#ifdef CONFIG_BATTERY_BQ27530
-	bq24192_update_chrg_type(power_supply_type == POWER_SUPPLY_TYPE_UNKNOWN ?
-			POWER_SUPPLY_TYPE_BATTERY : power_supply_type);
-#endif
+	bq24192_update_chrg_type(power_supply_type);//wyh
 
 	if (dotg->charger->max_power <= 2 && mA > 2) {
 		/* Enable charging */
@@ -726,7 +722,7 @@ static void dwc3_otg_sm_work(struct work_struct *w)
 	case OTG_STATE_UNDEFINED:
 		dwc3_otg_init_sm(dotg);
 		if (!dotg->psy) {
-			dotg->psy = power_supply_get_by_name("usb");
+			dotg->psy = power_supply_get_by_name("usb_qpnp");
 
 			if (!dotg->psy)
 				dev_err(phy->dev,

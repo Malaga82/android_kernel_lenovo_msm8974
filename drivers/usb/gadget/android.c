@@ -105,6 +105,7 @@ static const char longname[] = "Gadget Android";
 #define PRODUCT_ID		0x0001
 
 #define ANDROID_DEVICE_NODE_NAME_LENGTH 11
+int is_testmode = 0;
 
 struct android_usb_function {
 	char *name;
@@ -314,6 +315,36 @@ static void android_pm_qos_update_latency(struct android_dev *dev, int vote)
 	last_vote = vote;
 }
 
+struct android_dev *_android_dev;
+extern int is_usb30_plugin ;
+void popup_usb_select_window(int popup){
+	struct android_dev *dev = _android_dev;
+	char *appear[2]    = { "USB_STATE=AVAILABLE", NULL };
+	char *disappear[2]   = { "USB_STATE=UNAVAILABLE", NULL };
+	char **uevent_envp = NULL;
+	static int old_state = 0;
+
+//	printk("old state is %d new state is %d in %s\n",old_state,popup,__func__);
+	if((old_state == popup) || (popup == 0))
+		return;
+	else
+		old_state = popup;
+	
+	if(popup == 1)
+		uevent_envp = appear;
+	else if(popup == 2)
+	{
+		uevent_envp = disappear;
+		is_usb30_plugin = 0;// when usb calbe is plugged out, set is_usb30_plugin as zero
+	}
+	if(uevent_envp){
+		kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE, uevent_envp);
+		pr_info("%s: sent uevent %s\n", __func__, uevent_envp[0]);
+	}
+}
+
+extern int is_charger_plug_in(void);
+char* cdrom_path = "/system/etc/cdrom_install.iso";
 static void android_work(struct work_struct *data)
 {
 	struct android_dev *dev = container_of(data, struct android_dev, work);
@@ -327,6 +358,7 @@ static void android_work(struct work_struct *data)
 	static enum android_device_state last_uevent, next_state;
 	unsigned long flags;
 	int pm_qos_vote = -1;
+	int popup = 0;
 
 	spin_lock_irqsave(&cdev->lock, flags);
 	if (dev->suspended != dev->sw_suspended && cdev->config) {
@@ -347,10 +379,17 @@ static void android_work(struct work_struct *data)
 	}
 	dev->sw_connected = dev->connected;
 	dev->sw_suspended = dev->suspended;
+	//add by wz for usb select window
+	if (cdev->config){
+		popup = 1;
+	}
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
+//	if(is_charger_plug_in() == 0)
+//		popup=2;
 	if (pm_qos_vote != -1)
 		android_pm_qos_update_latency(dev, pm_qos_vote);
+	popup_usb_select_window(popup);
 
 	if (uevent_envp) {
 		/*
@@ -381,6 +420,10 @@ static void android_work(struct work_struct *data)
 					   uevent_envp);
 			last_uevent = next_state;
 		}
+		if(uevent_envp == configured)
+			fsg_store_file(cdrom_dev,NULL,cdrom_path,strlen(cdrom_path));
+		if(uevent_envp == disconnected)
+			fsg_store_file(cdrom_dev,NULL,NULL,0);
 		pr_info("%s: sent uevent %s\n", __func__, uevent_envp[0]);
 	} else {
 		pr_info("%s: did not send uevent (%d %d %p)\n", __func__,
@@ -1132,6 +1175,8 @@ static struct android_usb_function audio_function = {
 };
 #endif
 
+extern int diagchar_dev_create(void);
+extern void diagchar_dev_delete(void);
 
 /* DIAG */
 static char diag_clients[32];	    /*enabled DIAG clients- "diag[,diag_mdm]" */
@@ -1140,6 +1185,11 @@ static ssize_t clients_store(
 		const char *buff, size_t size)
 {
 	strlcpy(diag_clients, buff, sizeof(diag_clients));
+	if(is_testmode == 0){
+		diagchar_dev_delete();
+		msleep (100);
+		diagchar_dev_create();
+	}
 
 	return size;
 }
@@ -1397,10 +1447,27 @@ ptp_function_bind_config(struct android_usb_function *f,
 	return mtp_bind_config(c, true);
 }
 
+struct android_configuration *_android_conf = NULL;
 static int mtp_function_ctrlrequest(struct android_usb_function *f,
 					struct usb_composite_dev *cdev,
 					const struct usb_ctrlrequest *c)
 {
+#ifdef LENOVO_MS_OS_DESCRIPTOR
+	struct android_usb_function_holder *f_count;
+	struct android_configuration *conf = _android_conf;
+	int	   functions_no=0;
+	char   usb_function_string[32];
+	char  *buff = usb_function_string;
+
+	list_for_each_entry(f_count, &conf->enabled_functions, enabled_list)
+	{
+		functions_no++;
+		buff += sprintf(buff, "%s,", f_count->f->name);
+	}
+	*(buff-1) = '\n';
+
+	mtp_read_usb_functions(functions_no, usb_function_string);
+#endif
 	return mtp_ctrlrequest(cdev, c);
 }
 
@@ -1766,48 +1833,32 @@ struct mass_storage_function_config {
 static int mass_storage_function_init(struct android_usb_function *f,
 					struct usb_composite_dev *cdev)
 {
-	struct android_dev *dev = cdev_to_android_dev(cdev);
+//	struct android_dev *dev = cdev_to_android_dev(cdev);
 	struct mass_storage_function_config *config;
 	struct fsg_common *common;
-	int err;
-	int i, n;
-	char name[FSG_MAX_LUNS][MAX_LUN_NAME];
-	u8 uicc_nluns = dev->pdata ? dev->pdata->uicc_nluns : 0;
+	int err , i ,j;
+	char lun_name[10];
 
 	config = kzalloc(sizeof(struct mass_storage_function_config),
 								GFP_KERNEL);
 	if (!config)
 		return -ENOMEM;
 
-	config->fsg.nluns = 1;
-	snprintf(name[0], MAX_LUN_NAME, "lun");
-	config->fsg.luns[0].removable = 1;
-
-	if (dev->pdata && dev->pdata->cdrom) {
-		config->fsg.luns[config->fsg.nluns].cdrom = 1;
-		config->fsg.luns[config->fsg.nluns].ro = 1;
-		config->fsg.luns[config->fsg.nluns].removable = 0;
-		snprintf(name[config->fsg.nluns], MAX_LUN_NAME, "lun0");
-		config->fsg.nluns++;
-	}
-	if (dev->pdata && dev->pdata->internal_ums) {
-		config->fsg.luns[config->fsg.nluns].cdrom = 0;
-		config->fsg.luns[config->fsg.nluns].ro = 0;
-		config->fsg.luns[config->fsg.nluns].removable = 1;
-		snprintf(name[config->fsg.nluns], MAX_LUN_NAME, "lun1");
-		config->fsg.nluns++;
-	}
-
-	if (uicc_nluns > FSG_MAX_LUNS - config->fsg.nluns) {
-		uicc_nluns = FSG_MAX_LUNS - config->fsg.nluns;
-		pr_debug("limiting uicc luns to %d\n", uicc_nluns);
-	}
-
-	for (i = 0; i < uicc_nluns; i++) {
-		n = config->fsg.nluns;
-		snprintf(name[n], MAX_LUN_NAME, "uicc%d", i);
-		config->fsg.luns[n].removable = 1;
-		config->fsg.nluns++;
+	config->fsg.nluns = 2;
+	for (i = 0; i < config->fsg.nluns;i++){
+		config->fsg.luns[i].removable = 1;
+		config->fsg.luns[i].nofua = 1; 
+		/*
+		 *lun 0 - cdrom
+		 *lun 1 - external storage
+		 *lun 2 - internal storage
+		 */
+		if(i == 0) {
+			config->fsg.luns[i].cdrom = 1;
+			config->fsg.luns[i].ro = 1;
+		}
+		else
+			config->fsg.luns[i].cdrom = 0;
 	}
 
 	common = fsg_common_init(NULL, cdev, &config->fsg);
@@ -1816,24 +1867,22 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		return PTR_ERR(common);
 	}
 
-	for (i = 0; i < config->fsg.nluns; i++) {
-		err = sysfs_create_link(&f->dev->kobj,
-					&common->luns[i].dev.kobj,
-					name[i]);
-		if (err)
-			goto error;
+	for(i = 0 ; i < config->fsg.nluns;i++){
+		snprintf(lun_name ,sizeof(lun_name),"lun%d",i);
+		err = sysfs_create_link(&f->dev->kobj,&common->luns[i].dev.kobj,lun_name);
+		if(err){
+			for(j = 0; j < i;j++){
+				snprintf(lun_name ,sizeof(lun_name),"lun%d",j);
+				sysfs_delete_link(&f->dev->kobj,&common->luns[j].dev.kobj,lun_name);
+			}
+			fsg_common_release(&common->ref);
+			kfree(config);
+			return err;
+		}
 	}
-
 	config->common = common;
 	f->config = config;
 	return 0;
-error:
-	for (; i > 0 ; i--)
-		sysfs_remove_link(&f->dev->kobj, name[i-1]);
-
-	fsg_common_release(&common->ref);
-	kfree(config);
-	return err;
 }
 
 static void mass_storage_function_cleanup(struct android_usb_function *f)
@@ -2374,6 +2423,7 @@ functions_store(struct device *pdev, struct device_attribute *attr,
 				conf = alloc_android_config(dev);
 
 			curr_conf = curr_conf->next;
+			_android_conf = conf;
 		}
 
 		while (conf_str) {
@@ -2675,6 +2725,8 @@ static int android_bind(struct usb_composite_dev *cdev)
 		return id;
 	strings_dev[STRING_SERIAL_IDX].id = id;
 	device_desc.iSerialNumber = id;
+	if(is_testmode == 1)
+		device_desc.iSerialNumber = 0;
 
 	if (gadget_is_otg(cdev->gadget))
 		list_for_each_entry(conf, &dev->configs, list_item)
@@ -2824,18 +2876,16 @@ static void android_resume(struct usb_gadget *gadget)
 	composite_resume(gadget);
 }
 
-#ifdef CONFIG_MACH_SHENQI_K9
+
 static ssize_t usb_speed_show(struct device *dev,
-                struct device_attribute *attr, char *buf)
+		struct device_attribute *attr, char *buf)
 {
-        struct android_dev *android_dev = dev_get_drvdata(dev);
-        struct usb_gadget *gadget = android_dev->cdev->gadget;
-        return snprintf(buf, PAGE_SIZE,usb_speed_string(gadget->speed));
+	struct android_dev *android_dev = dev_get_drvdata(dev);
+	struct usb_gadget *gadget = android_dev->cdev->gadget;
+	return snprintf(buf, PAGE_SIZE,usb_speed_string(gadget->speed));
 }
 
 static DEVICE_ATTR(iSpeed, S_IRUGO | S_IWUSR, usb_speed_show,NULL);
-#endif
-
 static int android_create_device(struct android_dev *dev, u8 usb_core_id)
 {
 	struct device_attribute **attrs = android_usb_attributes;
@@ -2863,9 +2913,8 @@ static int android_create_device(struct android_dev *dev, u8 usb_core_id)
 			return err;
 		}
 	}
-#ifdef CONFIG_MACH_SHENQI_K9
-        err = device_create_file(dev->dev, &dev_attr_iSpeed);
-#endif
+	/* speed */
+	err = device_create_file(dev->dev, &dev_attr_iSpeed);
 	return 0;
 }
 
@@ -2961,6 +3010,16 @@ static int usb_diag_update_pid_and_serial_num(u32 pid, const char *snum)
 
 	return 0;
 }
+#ifdef USB_BACKDOOR_WORK
+//static struct kobject *usb_backdoor_kobj = NULL;
+static void usb_backdoor_work_func(struct work_struct *data)
+{
+	char *usb_backdoor[2]    = { "USB_STATE=BACKDOOR", NULL };
+	struct android_dev *dev = _android_dev;
+
+	kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE, usb_backdoor);
+}
+#endif
 
 static int __devinit android_probe(struct platform_device *pdev)
 {
@@ -3039,6 +3098,9 @@ static int __devinit android_probe(struct platform_device *pdev)
 	android_dev->configs_num = 0;
 	INIT_LIST_HEAD(&android_dev->configs);
 	INIT_WORK(&android_dev->work, android_work);
+#ifdef USB_BACKDOOR_WORK
+	INIT_WORK(&usb_backdoor_work, usb_backdoor_work_func);
+#endif
 	mutex_init(&android_dev->mutex);
 
 	android_dev->pdata = pdata;
@@ -3076,7 +3138,7 @@ static int __devinit android_probe(struct platform_device *pdev)
 				 "composite driver\n", __func__);
 		goto err_probe;
 	}
-
+	_android_dev = android_dev;
 	/* pm qos request to prevent apps idle power collapse */
 	if (pdata && pdata->swfi_latency)
 		pm_qos_add_request(&android_dev->pm_qos_req_dma,
@@ -3186,3 +3248,9 @@ static void __exit cleanup(void)
 	platform_driver_unregister(&android_platform_driver);
 }
 module_exit(cleanup);
+static int __init early_testmode(char *p)
+{
+	is_testmode = simple_strtoul(p,NULL,0);
+	return 0;
+}
+early_param("testmode",early_testmode);
