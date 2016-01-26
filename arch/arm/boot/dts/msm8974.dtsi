@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -715,7 +715,9 @@
 		spi-max-frequency = <19200000>;
 
 		qcom,gpio-mosi = <&msmgpio 53 0>;
-		qcom,gpio-miso = <&msmgpio 54 0>;
+/*ljk 54 for camera*/
+		//qcom,gpio-miso = <&msmgpio 54 0>;
+/*+end*/
 		qcom,gpio-clk  = <&msmgpio 56 0>;
 		qcom,gpio-cs0  = <&msmgpio 55 0>;
 
@@ -795,6 +797,7 @@
 				      30>;
 
 			qcom,cdc-reset-gpio = <&msmgpio 63 0>;
+			/*qcom,headset-gnd-mic-switch = <&msmgpio 62 0>;*/
 
 			cdc-vdd-buck-supply = <&pm8941_s2>;
 			qcom,cdc-vdd-buck-voltage = <2150000 2150000>;
@@ -833,7 +836,7 @@
 						   "cdc-vddcx-2";
 
 			qcom,cdc-micbias-ldoh-v = <0x3>;
-			qcom,cdc-micbias-cfilt1-mv = <1800>;
+			qcom,cdc-micbias-cfilt1-mv = <2700>;
 			qcom,cdc-micbias-cfilt2-mv = <2700>;
 			qcom,cdc-micbias-cfilt3-mv = <2700>;
 			qcom,cdc-micbias1-cfilt-sel = <0x0>;
@@ -843,35 +846,34 @@
 			qcom,cdc-mclk-clk-rate = <9600000>;
 			qcom,cdc-slim-ifd = "taiko-slim-ifd";
 			qcom,cdc-slim-ifd-elemental-addr = [00 00 A0 00 17 02];
-			qcom,cdc-dmic-sample-rate = <4800000>;
+			qcom,cdc-dmic-sample-rate = <2400000>;
 		};
 	};
 
 	sound {
 		compatible = "qcom,msm8974-audio-taiko";
 		qcom,model = "msm8974-taiko-snd-card";
-		reg = <0xfe02b000 0x4>,
-		      <0xfe02c000 0x4>,
+		reg = <0xfe02c000 0x4>,
 		      <0xfe02d000 0x4>,
-		      <0xfe02e000 0x4>;
+		      <0xfe02e000 0x4>,
+		      <0xfe02f000 0x4>;
 		reg-names = "lpaif_pri_mode_muxsel",
 			    "lpaif_sec_mode_muxsel",
 			    "lpaif_tert_mode_muxsel",
 			    "lpaif_quat_mode_muxsel";
 
 		qcom,audio-routing =
-			"AIF4 VI", "MCLK",
 			"RX_BIAS", "MCLK",
 			"LDO_H", "MCLK",
 			"AIF4 MAD", "MCLK",
-			"AMIC1", "MIC BIAS1 Internal1",
-			"MIC BIAS1 Internal1", "Handset Mic",
+			"DMIC1", "MIC BIAS1 External",
+			"MIC BIAS1 External", "Handset Mic",
 			"AMIC2", "MIC BIAS2 External",
 			"MIC BIAS2 External", "Headset Mic",
-			"AMIC3", "MIC BIAS2 External",
-			"MIC BIAS2 External", "ANCRight Headset Mic",
-			"AMIC4", "MIC BIAS2 External",
-			"MIC BIAS2 External", "ANCLeft Headset Mic",
+			"DMIC5", "MIC BIAS4 External",
+			"MIC BIAS4 External", "ANC Front Mic",
+			"DMIC3", "MIC BIAS3 External",
+			"MIC BIAS3 External", "DUAL Rear Mic",
 			"DMIC1", "MIC BIAS1 External",
 			"MIC BIAS1 External", "Digital Mic1",
 			"DMIC2", "MIC BIAS1 External",
@@ -957,6 +959,37 @@
 		qcom,master-id = <86>;
 		qcom,scl-gpio = <&msmgpio 7 0>;
 		qcom,sda-gpio = <&msmgpio 6 0>;
+	};
+
+	i2c_6: i2c@f9928000 { /* BLSP-1 QUP-6 */
+		cell-index = <6>;
+		compatible = "qcom,i2c-qup";
+		reg = <0xf9928000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		interrupts = <0 100 0>;
+		interrupt-names = "qup_err_intr";
+		qcom,i2c-bus-freq = <400000>;
+		qcom,i2c-src-freq = <19200000>;
+		qcom,scl-gpio = <&msmgpio 30 0>;
+		qcom,sda-gpio = <&msmgpio 29 0>;
+		qcom,master-id = <86>;
+	};
+
+        i2c_5: i2c@f9927000 {
+		cell-index = <5>;
+		compatible = "qcom,i2c-qup";
+		reg = <0xf9927000 0x1000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		interrupts = <0 99 0>;
+		interrupt-names = "qup_err_intr";
+		qcom,i2c-bus-freq = <100000>;
+		qcom,i2c-src-freq = <19200000>;
+		qcom,scl-gpio = <&msmgpio 26 0>;
+		qcom,sda-gpio = <&msmgpio 25 0>;
 	};
 
 	spi_0: spi@f9923000 { /* BLSP1 QUP1 */
@@ -1679,6 +1712,7 @@
 		dwc_usb3-adc_tm = <&pm8941_adc_tm>;
 		qcom,dwc-usb3-msm-tx-fifo-size = <29696>;
 		qcom,dwc-usb3-msm-qdss-tx-fifo-size = <8192>;
+		qcom,ext_redriver_en_gpio = <&msmgpio 53 0x00>;
 
 		qcom,msm-bus,name = "usb3";
 		qcom,msm-bus,num-cases = <2>;
@@ -1954,8 +1988,8 @@
 		qcom,msm-dai-q6-mi2s-quat {
 			compatible = "qcom,msm-dai-q6-mi2s";
 			qcom,msm-dai-q6-mi2s-dev-id = <3>;
-			qcom,msm-mi2s-rx-lines = <1>;
-			qcom,msm-mi2s-tx-lines = <2>;
+			qcom,msm-mi2s-rx-lines = <2>;
+			qcom,msm-mi2s-tx-lines = <1>;
 		};
 	};
 
@@ -1975,6 +2009,10 @@
 
 	qcom,msm-adsp-sensors {
 		compatible = "qcom,msm-adsp-sensors";
+		qcom,src-id = <11>;
+		qcom,dst-id = <604>;
+		qcom,ab = <32505856>;
+		qcom,ib = <32505856>;
 	};
 
 	qcom,mss@fc880000 {
@@ -2100,8 +2138,8 @@
 		qcom,msm-bus,num-cases = <2>;
 		qcom,msm-bus,num-paths = <1>;
 		qcom,msm-bus,vectors-KBps =
-				<88 618 0 0>,
-				<88 618 0 800>;
+				<54 618 0 0>,
+				<54 618 0 800>;
         };
 
 	qseecom: qcom,qseecom@7b00000 {
@@ -2130,7 +2168,7 @@
 		reg = <0xf9017000 0x1000>;
 		interrupts = <0 3 0>, <0 4 0>;
 		qcom,bark-time = <11000>;
-		qcom,pet-time = <10000>;
+		qcom,pet-time = <8000>;
 		qcom,ipi-ping;
 	};
 
@@ -2211,7 +2249,7 @@
 		qcom,memory-reservation-size = <0x280000>; /* 2.5M EBI1 buffer */
 	};
 
-        qcom_cedev: qcom,qcedev@fd440000 {
+        qcom,qcedev@fd440000 {
 		compatible = "qcom,qcedev";
 		reg = <0xfd440000 0x20000>,
 		      <0xfd444000 0x1b000>;
@@ -2228,7 +2266,7 @@
 				<56 512 3936000 393600>;
 	};
 
-        qcom_crypto: qcrypto@fd440000 {
+        qcom,qcrypto@fd440000 {
 		compatible = "qcom,qcrypto";
 		reg = <0xfd440000 0x20000>,
 		      <0xfd444000 0x1b000>;
@@ -2249,7 +2287,7 @@
 				<56 512 3936000 393600>;
 	};
 
-        qcom_crypto1: qcrypto1@fd440000 {
+        qcom,qcrypto1@fd440000 {
 		compatible = "qcom,qcrypto";
 		reg = <0xfd440000 0x20000>,
 		      <0xfd444000 0x1b000>;
@@ -2475,22 +2513,6 @@
 
 	qcom,bcl {
 		compatible = "qcom,bcl";
-	};
-
-	i2c@f9928000 { /* BLSP-1 QUP-6 */
-		cell-index = <3>;
-		compatible = "qcom,i2c-qup";
-		reg = <0xf9928000 0x1000>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg-names = "qup_phys_addr";
-		interrupts = <0 100 0>;
-		interrupt-names = "qup_err_intr";
-		qcom,i2c-bus-freq = <400000>;
-		qcom,i2c-src-freq = <19200000>;
-		qcom,scl-gpio = <&msmgpio 30 0>;
-		qcom,sda-gpio = <&msmgpio 29 0>;
-		qcom,master-id = <86>;
 	};
 
 	qcom,ssm {
