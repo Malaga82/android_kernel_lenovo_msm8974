@@ -68,3 +68,4 @@ obj-$(CONFIG_SENSORS_MMA8X5X)	  	+= mma8x5x.o
 obj-$(CONFIG_SENSORS_STK3X1X)		+= stk3x1x.o
 obj-$(CONFIG_SENSORS_CAPELLA_CM36283)	+= cm36283.o
 obj-$(CONFIG_MACH_SHENQI_K9)		+= shenqi_hall_switch.o
+obj-$(CONFIG_SENSORS_ISL29124)		+= isl29124_f.o
