@@ -4,4 +4,5 @@ endif
 if ARCH_MSM
 source "drivers/platform/msm/Kconfig"
 source "drivers/platform/shenqi/Kconfig"
+source "drivers/platform/lenovo/Kconfig"
 endif

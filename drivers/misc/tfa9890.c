@@ -31,6 +31,7 @@
 #include <linux/gpio.h>
 #include <linux/miscdevice.h>
 #include <linux/regulator/consumer.h>
+#include <linux/input/synaptics_dsx_rmi4.h>
 #include <linux/of_gpio.h>
 #include "tfa9890.h"
 #ifdef KERNEL_ABOVE_2_6_38
@@ -40,7 +41,7 @@
 #define DRIVER_NAME "tfa9890"
 #define MAX_BUFFER_SIZE 512	
 #define GPIO_SLEEP_LOW_US 10
-#define RESET_DELAY 500
+#define RESET_DELAY 50
 
 struct tfa9890_dev	{
 	wait_queue_head_t	read_wq;

@@ -10,7 +10,7 @@
  * GNU General Public License for more details.
  *
  */
-
+#define MPCTL_MAX_CMD 128
 struct rq_data {
 	unsigned int rq_avg;
 	unsigned long rq_poll_jiffies;
@@ -20,6 +20,7 @@ struct rq_data {
 	unsigned long def_timer_last_jiffy;
 	unsigned int def_interval;
 	unsigned int hotplug_disabled;
+	unsigned char mpctl[MPCTL_MAX_CMD];
 	int64_t def_start_time;
 	struct attribute_group *attr_group;
 	struct kobject *kobj;
