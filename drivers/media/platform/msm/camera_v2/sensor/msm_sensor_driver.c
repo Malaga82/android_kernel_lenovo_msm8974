@@ -19,7 +19,7 @@
 #include "msm_camera_dt_util.h"
 
 /* Logging macro */
-/*#define MSM_SENSOR_DRIVER_DEBUG*/
+#define MSM_SENSOR_DRIVER_DEBUG
 #undef CDBG
 #ifdef MSM_SENSOR_DRIVER_DEBUG
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
@@ -31,10 +31,6 @@
 
 /* Static declaration */
 static struct msm_sensor_ctrl_t *g_sctrl[MAX_CAMERAS];
-
-#ifdef CONFIG_MACH_SHENQI_K9
-extern int msm_eeprom_fancymaker_check_sensor_module_id(const char * sensor_name, const char * eeprom_name);
-#endif
 
 static int msm_sensor_platform_remove(struct platform_device *pdev)
 {
@@ -591,14 +587,6 @@ int32_t msm_sensor_driver_probe(void *setting)
 		goto FREE_CAMERA_INFO;
 	}
 
-#ifdef CONFIG_MACH_SHENQI_K9
-	rc = msm_eeprom_fancymaker_check_sensor_module_id(slave_info->sensor_name,  slave_info->eeprom_name);
-	if (rc < 0) {
-		pr_err("%s fancymaker_check_sensor_id failed", slave_info->sensor_name);
-		goto CAMERA_POWER_DOWN;
-	}
-#endif
-
 	pr_err("%s probe succeeded", slave_info->sensor_name);
 
 	/*
@@ -818,6 +806,7 @@ static int32_t msm_sensor_driver_get_dt_data(struct msm_sensor_ctrl_t *s_ctrl)
 	if (rc < 0) {
 		pr_err("%s:%d Invalid sensor position\n", __func__, __LINE__);
 		sensordata->sensor_info->position = INVALID_CAMERA_B;
+		rc = 0;
 	}
 
 	rc = of_property_read_u32(of_node, "qcom,sensor-mode",

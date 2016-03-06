@@ -57,6 +57,9 @@
 /* RX_HPH_CNP_WG_TIME increases by 0.24ms */
 #define TAIKO_WG_TIME_FACTOR_US	240
 
+#define IMPEDANCE_DETECT_ENABLE false
+#define KSEVEN_HEADSET_IMPEDANCE_DEFAULT 21000
+
 static atomic_t kp_taiko_priv;
 static int spkr_drv_wrnd_param_set(const char *val,
 				   const struct kernel_param *kp);
@@ -3298,13 +3301,16 @@ static int taiko_hphl_dac_event(struct snd_soc_dapm_widget *w,
 						 WCD9XXX_CLSH_STATE_HPHL,
 						 WCD9XXX_CLSH_REQ_ENABLE,
 						 WCD9XXX_CLSH_EVENT_PRE_DAC);
-		ret = wcd9xxx_mbhc_get_impedance(&taiko_p->mbhc,
-					&impedl, &impedr);
-		if (!ret)
-			wcd9xxx_clsh_imped_config(codec, impedl);
-		else
-			dev_err(codec->dev, "Failed to get mbhc impedance %d\n",
-						ret);
+        if (IMPEDANCE_DETECT_ENABLE) {
+            ret = wcd9xxx_mbhc_get_impedance(&taiko_p->mbhc,
+                    &impedl, &impedr);
+            if (!ret)
+                wcd9xxx_clsh_imped_config(codec, impedl);
+            else
+                dev_err(codec->dev, "Failed to get mbhc impedance %d\n",
+                        ret);
+        } else
+            wcd9xxx_clsh_imped_config(codec, KSEVEN_HEADSET_IMPEDANCE_DEFAULT);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		snd_soc_update_bits(codec, TAIKO_A_CDC_CLK_RDAC_CLK_EN_CTL,
@@ -7012,7 +7018,7 @@ static int taiko_post_reset_cb(struct wcd9xxx *wcd9xxx)
 		ret = wcd9xxx_mbhc_init(&taiko->mbhc, &taiko->resmgr, codec,
 					taiko_enable_mbhc_micbias,
 					&mbhc_cb, &cdc_intr_ids,
-					rco_clk_rate, true);
+					rco_clk_rate, IMPEDANCE_DETECT_ENABLE);
 		if (ret)
 			pr_err("%s: mbhc init failed %d\n", __func__, ret);
 		else
@@ -7219,7 +7225,7 @@ static int taiko_codec_probe(struct snd_soc_codec *codec)
 	ret = wcd9xxx_mbhc_init(&taiko->mbhc, &taiko->resmgr, codec,
 				taiko_enable_mbhc_micbias,
 				&mbhc_cb, &cdc_intr_ids,
-				rco_clk_rate, true);
+				rco_clk_rate, IMPEDANCE_DETECT_ENABLE);
 	if (ret) {
 		pr_err("%s: mbhc init failed %d\n", __func__, ret);
 		goto err_hwdep;
