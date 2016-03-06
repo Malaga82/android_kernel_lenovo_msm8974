@@ -501,12 +501,12 @@ static int __devinit nxp_tfa9890_probe(struct i2c_client *client,
 
 		gpio_set_value(platform_data->reset_gpio_test, 1);
 		usleep(GPIO_SLEEP_LOW_US);
-		gpio_set_value(platform_data->reset_gpio_test, 1);
+		gpio_set_value(platform_data->reset_gpio_test, 0);
 		msleep(RESET_DELAY);
 	}
 #endif
 
-#if 1
+#if 0
 	if (gpio_is_valid(platform_data->reset_gpio)) {
 		/* configure tfa9890s reset out gpio */
 		ret = gpio_request(platform_data->reset_gpio,
@@ -528,7 +528,7 @@ static int __devinit nxp_tfa9890_probe(struct i2c_client *client,
 		gpio_set_value(platform_data->reset_gpio, 1);
 		usleep(GPIO_SLEEP_LOW_US);
 		gpio_set_value(platform_data->reset_gpio, 0);
-		usleep(RESET_DELAY);
+		msleep(RESET_DELAY);
 	}
 #else
     tfa9890_dev->first_open = true;
@@ -587,7 +587,7 @@ err_irq_gpio_req:
 err_enable_irq:
 	tfa9890_irq_enable(tfa9890_dev, false);
 
-#if 1
+#if 0
 err_reset_gpio_dir:
 	if (gpio_is_valid(platform_data->reset_gpio))
 		gpio_free(platform_data->reset_gpio);
