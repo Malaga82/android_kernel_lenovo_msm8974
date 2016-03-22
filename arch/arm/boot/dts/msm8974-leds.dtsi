@@ -125,7 +125,7 @@
 			label = "flash";
 			qcom,id = <1>;
 			linux,name = "led:torch_0";
-			qcom,current = <85>;
+			qcom,current = <100>;
 			qcom,torch-enable;
 		};
 
@@ -139,7 +139,7 @@
 			label = "flash";
 			qcom,id = <2>;
 			linux,name = "led:torch_1";
-			qcom,current = <85>;
+			qcom,current = <100>;
 			qcom,torch-enable;
 		};
 	};
@@ -166,7 +166,7 @@
                         reg = <0xc000 0x100>;
                         label = "vibrator";
                         qcom,vib-timeout-ms = <15000>;
-                        qcom,vib-vtg-level-mV = <3100>;
+                        qcom,vib-vtg-level-mV = <2850>;
                 };
 
 	qcom,leds@e200 {
