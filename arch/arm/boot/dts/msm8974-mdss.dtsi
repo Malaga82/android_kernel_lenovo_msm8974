@@ -106,6 +106,7 @@
 			qcom,memory-reservation-type = "EBI1";
 			qcom,memory-reservation-size = <0x2a30000>;
 			qcom,memblock-reserve = <0x03200000 0x01E00000>;
+                        /*qcom,mdss-fb-splash-logo-enabled;*/
 			qcom,mdss-fb-split = <720 720>;
 		};
 

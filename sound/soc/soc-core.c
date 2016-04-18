@@ -565,7 +565,6 @@ int snd_soc_suspend(struct device *dev)
 	* suspend before that's finished - wait for it to complete.
 	 */
 	snd_power_lock(card->snd_card);
-    printk(KERN_DEBUG "%s enter, power_state(0x%x)\n", __func__, card->snd_card->power_state);
 	snd_power_wait(card->snd_card, SNDRV_CTL_POWER_D0);
 	snd_power_unlock(card->snd_card);
 
@@ -801,8 +800,6 @@ static void soc_resume_deferred(struct work_struct *work)
 
 	/* userspace can access us now we are back as we were before */
 	snd_power_change_state(card->snd_card, SNDRV_CTL_POWER_D0);
-
-    printk(KERN_DEBUG "%s enter, unlock resume_thread_wakelock\n", __func__);
     wake_unlock(&resume_thread_wakelock);
 }
 
@@ -832,7 +829,6 @@ int snd_soc_resume(struct device *dev)
 		soc_resume_deferred(&card->deferred_resume_work);
 	} else {
 		dev_dbg(dev, "Scheduling resume work\n");
-        printk(KERN_DEBUG "%s enter, lock resume_thread_wakelock\n", __func__);
         wake_lock(&resume_thread_wakelock);
 		if (!schedule_work(&card->deferred_resume_work))
 			dev_err(dev, "resume work item may be lost\n");
@@ -2258,6 +2254,22 @@ static int snd_soc_add_controls(struct snd_card *card, struct device *dev,
 
 	return 0;
 }
+
+struct snd_kcontrol *snd_soc_card_get_kcontrol(struct snd_soc_card *soc_card,
+					       const char *name)
+{
+	struct snd_card *card = soc_card->snd_card;
+	struct snd_kcontrol *kctl;
+
+	if (unlikely(!name))
+		return NULL;
+
+	list_for_each_entry(kctl, &card->controls, list)
+		if (!strncmp(kctl->id.name, name, sizeof(kctl->id.name)))
+			return kctl;
+	return NULL;
+}
+EXPORT_SYMBOL_GPL(snd_soc_card_get_kcontrol);
 
 /**
  * snd_soc_add_codec_controls - add an array of controls to a codec.

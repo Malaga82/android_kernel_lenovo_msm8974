@@ -1863,7 +1863,7 @@ config MSM_CPU_FREQ_SET_MIN_MAX
 config MSM_CPU_FREQ_MAX
 	int "Max CPU Frequency"
 	depends on MSM_CPU_FREQ_SET_MIN_MAX
-	default 384000
+	default 2457600
 
 config MSM_CPU_FREQ_MIN
 	int "Min CPU Frequency"
@@ -1871,6 +1871,12 @@ config MSM_CPU_FREQ_MIN
 	default 245760
 
 endif # CPU_FREQ_MSM
+
+config CPU_VOLTAGE_TABLE
+	bool "Enable CPU Voltage Table via sysfs for adjustements"
+	default n
+	help
+	  DTS based kernel User Votlage Control
 
 config MSM_DEVFREQ_CPUBW
 	bool "Devfreq device for CPU<->DDR IB/AB BW voting"
@@ -3056,6 +3062,12 @@ config MSM_SECBOOT
 	bool "MSM Secboot verification driver"
 	help
 	Driver to expose secureboot status
+
+config PVS_LEVEL_INTERFACE
+	bool "Expose PVS level information in sys fs (Boeffla-Kernel)"
+	help
+	 Allow PVS level to be shown in Boeffla-Config app
+
 endif
 
 config KERNEL_TEXT_MPU_PROT

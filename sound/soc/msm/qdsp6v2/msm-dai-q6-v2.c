@@ -101,8 +101,11 @@ static const struct soc_enum mi2s_config_enum[] = {
 	SOC_ENUM_SINGLE_EXT(4, mi2s_format),
 };
 
+#ifdef CONFIG_MACH_SHENQI_K9
 static int msm_mi2s_get_port_id(u32 mi2s_id, int stream, u16 *port_id);
 extern atomic_t quat_mi2s_clk_ref;
+#endif
+
 static int msm_dai_q6_auxpcm_hw_params(
 				struct snd_pcm_substream *substream,
 				struct snd_pcm_hw_params *params,
@@ -1495,7 +1498,7 @@ static int msm_dai_q6_mi2s_prepare(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
-	printk("%s: dai id %d, afe port id = %x\n"
+	dev_dbg(dai->dev, "%s: dai id %d, afe port id = %x\n"
 		"dai_data->channels = %u sample_rate = %u\n", __func__,
 		dai->id, port_id, dai_data->channels, dai_data->rate);
 
@@ -1632,7 +1635,7 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 			return -EINVAL;
 		}
 	}
-	printk("%s: dai id %d dai_data->channels = %d\n"
+	dev_dbg(dai->dev, "%s: dai id %d dai_data->channels = %d\n"
 		"sample_rate = %u i2s_cfg_minor_version = %#x\n"
 		"bit_width = %hu  channel_mode = %#x mono_stereo = %#x\n"
 		"ws_src = %#x sample_rate = %u data_format = %#x\n"
@@ -1715,15 +1718,17 @@ static void msm_dai_q6_mi2s_shutdown(struct snd_pcm_substream *substream,
 				__func__, port_id);
 	}
 
+#ifdef CONFIG_MACH_SHENQI_K9
 	if ((atomic_read(&quat_mi2s_clk_ref) >= 1) && (port_id == AFE_PORT_ID_QUATERNARY_MI2S_RX)) {
-	   printk("[%s]quat_mi2s_clk_ref is using...port_id=%#x\n", __func__, port_id);
-	   if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask))
-	       clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
+		printk("[%s]quat_mi2s_clk_ref is using...port_id=%#x\n", __func__, port_id);
+		if (test_bit(STATUS_PORT_STARTED, dai_data->status_mask))
+			clear_bit(STATUS_PORT_STARTED, dai_data->status_mask);
 
-	   if (test_bit(STATUS_PORT_STARTED, dai_data->hwfree_status))
-	       clear_bit(STATUS_PORT_STARTED, dai_data->hwfree_status);
-	   return;
+		if (test_bit(STATUS_PORT_STARTED, dai_data->hwfree_status))
+			clear_bit(STATUS_PORT_STARTED, dai_data->hwfree_status);
+		return;
 	}
+#endif
 
 	dev_dbg(dai->dev, "%s: closing afe port id = %x\n",
 			__func__, port_id);
@@ -1738,6 +1743,7 @@ static void msm_dai_q6_mi2s_shutdown(struct snd_pcm_substream *substream,
 		clear_bit(STATUS_PORT_STARTED, dai_data->hwfree_status);
 }
 
+#ifdef CONFIG_MACH_SHENQI_K9
 int msm_q6_enable_mi2s_clocks(bool enable)
 {
     union afe_port_config port_config;
@@ -1773,6 +1779,7 @@ int msm_q6_enable_mi2s_clocks(bool enable)
     }
     return rc;
 }
+#endif
 
 static struct snd_soc_dai_ops msm_dai_q6_mi2s_ops = {
 	.startup	= msm_dai_q6_mi2s_startup,
@@ -1811,7 +1818,6 @@ static int msm_dai_q6_mi2s_get_lineconfig(u16 sd_lines, u16 *config_ptr,
 	u8 num_of_sd_lines;
 
 	num_of_sd_lines = num_of_bits_set(sd_lines);
-	printk("[%s]num_of_sd_lines =%d, sd_lines = %d\n", __func__, num_of_sd_lines, sd_lines);
 	switch (num_of_sd_lines) {
 	case 0:
 		pr_debug("%s: no line is assigned\n", __func__);
@@ -1820,11 +1826,9 @@ static int msm_dai_q6_mi2s_get_lineconfig(u16 sd_lines, u16 *config_ptr,
 		switch (sd_lines) {
 		case MSM_MI2S_SD0:
 			*config_ptr = AFE_PORT_I2S_SD0;
-			printk("[%s]MSM_MI2S_SD0 =%d, AFE_PORT_I2S_SD0 = %d\n", __func__, MSM_MI2S_SD0, AFE_PORT_I2S_SD0);
 			break;
 		case MSM_MI2S_SD1:
 			*config_ptr = AFE_PORT_I2S_SD1;
-			printk("[%s]MSM_MI2S_SD1 =%d, AFE_PORT_I2S_SD1 = %d\n", __func__, MSM_MI2S_SD1, AFE_PORT_I2S_SD1);
 			break;
 		case MSM_MI2S_SD2:
 			*config_ptr = AFE_PORT_I2S_SD2;
@@ -1900,7 +1904,6 @@ static int msm_dai_q6_mi2s_platform_data_validation(
 		return -EINVAL;
 	}
 
-	printk("[%s]MI2S RX sd line config\n", __func__);
 	rc = msm_dai_q6_mi2s_get_lineconfig(mi2s_pdata->rx_sd_lines,
 					    &sd_line, &ch_cnt);
 
@@ -1919,7 +1922,6 @@ static int msm_dai_q6_mi2s_platform_data_validation(
 		dai_driver->playback.channels_min = 0;
 		dai_driver->playback.channels_max = 0;
 	}
-	printk("[%s]MI2S TX sd line config\n", __func__);
 	rc = msm_dai_q6_mi2s_get_lineconfig(mi2s_pdata->tx_sd_lines,
 					    &sd_line, &ch_cnt);
 
