@@ -48,9 +48,6 @@
 #include "pm.h"
 #include "modem_notifier.h"
 #include "platsmp.h"
-/* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, START */
-#include "k9/shenqi_nv.h"
-/* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, END */
 
 
 static struct memtype_reserve msm8974_reserve_table[] __initdata = {
@@ -175,11 +172,6 @@ void __init msm8974_init(void)
 	regulator_has_full_constraints();
 	board_dt_populate(adata);
 	msm8974_add_drivers();
-
-    /* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, START */
-    shenqi_nv_init();
-    /* Tony Sun, 2013.9.24, For WIFI/BT read MAC from NV, END */
-
 }
 
 void __init msm8974_init_very_early(void)
