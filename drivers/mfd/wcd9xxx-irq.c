@@ -271,6 +271,10 @@ static irqreturn_t wcd9xxx_irq_thread(int irq, void *data)
 		goto err_disable_irq;
 	}
 
+	for (i = 0; i < num_irq_regs; i++) {
+        pr_debug("%s enter, status[%d] = 0x%x.\n", __func__, i, status[i]);
+    }
+
 	/* Apply masking */
 	for (i = 0; i < num_irq_regs; i++)
 		status[i] &= ~wcd9xxx_res->irq_masks_cur[i];

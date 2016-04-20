@@ -23,6 +23,7 @@
 #include <asm/page.h>
 #include <asm/mach/arch.h>
 #include <asm/mach-types.h>
+#include <mach/le_rkm.h>
 
 void __init early_init_dt_add_memory_arch(u64 base, u64 size)
 {
@@ -134,6 +135,10 @@ struct machine_desc * __init setup_machine_fdt(unsigned int dt_phys)
 
 	/* Retrieve various information from the /chosen node */
 	of_scan_flat_dt(early_init_dt_scan_chosen, boot_command_line);
+#ifdef CONFIG_LENOVO_DEBUG_RKM
+	/* Retrieve various information from the /rkm_log node */
+	of_scan_flat_dt(early_init_dt_scan_boot_log,NULL);
+#endif
 	/* Initialize {size,address}-cells info */
 	of_scan_flat_dt(early_init_dt_scan_root, NULL);
 	/* Setup memory, calling early_init_dt_add_memory_arch */

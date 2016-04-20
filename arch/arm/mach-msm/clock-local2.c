@@ -36,6 +36,7 @@
 #define HALT_CHECK_MAX_LOOPS	500
 /* For clock without halt checking, wait this long after enables/disables. */
 #define HALT_CHECK_DELAY_US	10
+#define HALT_CHECK_DELAY_US_50	50
 
 /*
  * When updating an RCG configuration, check the update bit up to this number
@@ -343,7 +344,15 @@ static void branch_clk_halt_check(u32 halt_check, const char *clk_name,
 	 * the delay starts after the branch disable.
 	 */
 	mb();
-
+//jinjt add delay for K7L repeated power key pressed KSEVENL-2213
+    if(!strcmp(clk_name,"mdss_pclk1_clk")
+       ||!strcmp(clk_name,"mdss_byte1_clk")
+       ||!strcmp(clk_name,"mdss_pclk0_clk")
+       ||!strcmp(clk_name,"mdss_byte0_clk"))
+    {
+		udelay(HALT_CHECK_DELAY_US_50);
+        return;
+    }
 	if (halt_check == DELAY || halt_check == HALT_VOTED) {
 		udelay(HALT_CHECK_DELAY_US);
 	} else if (halt_check == HALT) {

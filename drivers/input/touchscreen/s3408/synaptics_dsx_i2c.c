@@ -1700,9 +1700,9 @@ int start_x,start_y,end_x,end_y;
 			case 3:
 			    SYNAP_DEBUG("one finger double tap detected!");
 				doze_status = DOZE_WAKEUP;
-				input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
+				input_report_key(rmi4_data->input_dev, KEY_GESTURE_DT, 1);
 				input_sync(rmi4_data->input_dev);
-				input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
+				input_report_key(rmi4_data->input_dev, KEY_GESTURE_DT, 0);
 				input_sync(rmi4_data->input_dev);
 				break;
 				/*
@@ -2013,27 +2013,30 @@ unsigned char button_type;
 							{
 								SYNAP_DEBUG("double tap menu detected!!");
 								doze_status = DOZE_WAKEUP;
+								/*
 								input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
 								input_sync(rmi4_data->input_dev);
 								input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
 								input_sync(rmi4_data->input_dev);
+								*/
 							}else if(button_type == 2)
 							{
 								SYNAP_DEBUG("double tap home detected!!");
-                                doze_status = DOZE_WAKEUP;
-								input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
+								input_report_key(rmi4_data->input_dev, KEY_GESTURE_W, 1);
 								input_sync(rmi4_data->input_dev);
-								input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
+								input_report_key(rmi4_data->input_dev, KEY_GESTURE_W, 0);
 								input_sync(rmi4_data->input_dev);
 								doze_status = DOZE_WAKEUP;
 							}else if(button_type == 4)
 							{
 								SYNAP_DEBUG("double tap back detected!!");
 								doze_status = DOZE_WAKEUP;
+								/*
 								input_report_key(rmi4_data->input_dev, KEY_POWER, 1);
 								input_sync(rmi4_data->input_dev);
 								input_report_key(rmi4_data->input_dev, KEY_POWER, 0);
 								input_sync(rmi4_data->input_dev);
+								*/
 							}else
 							{
 								SYNAP_DEBUG("unknown button gesture!!");
@@ -3768,7 +3771,7 @@ else
 					EV_KEY, KEY_BACK);
 }
 #if SYNA_SLIDE_WAKEUP
-	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_POWER);
+	//input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_POWER);
 	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_GESTURE_V);
 	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_GESTURE_E);
 	input_set_capability(rmi4_data->input_dev, EV_KEY, KEY_GESTURE_W);

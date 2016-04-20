@@ -1980,6 +1980,7 @@ static void finish_task_switch(struct rq *rq, struct task_struct *prev)
 {
 	struct mm_struct *mm = rq->prev_mm;
 	long prev_state;
+	//struct timespec sched_time;
 
 	rq->prev_mm = NULL;
 
@@ -2017,6 +2018,10 @@ static void finish_task_switch(struct rq *rq, struct task_struct *prev)
 		kprobe_flush_task(prev);
 		put_task_struct(prev);
 	}
+
+	/*for debug: save the sched time to task struct*/
+	/* do_posix_clock_monotonic_gettime(&sched_time); */
+	//current->last_sched_time = sched_time;
 }
 
 #ifdef CONFIG_SMP

@@ -23,6 +23,8 @@
 #include "mdss_panel.h"
 #include "mdss_mdp_splash_logo.h"
 
+//#define ESD_FOR_LCD
+#define READ_LCD_PARAM
 #define MSM_FB_DEFAULT_PAGE_SIZE 2
 #define MFD_KEY  0x11161126
 #define MSM_FB_MAX_DEV_LIST 32
@@ -84,7 +86,6 @@ struct disp_info_notify {
 	int value;
 	int is_suspend;
 	int ref_count;
-	bool init_done;
 };
 
 struct msm_sync_pt_data {

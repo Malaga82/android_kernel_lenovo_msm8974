@@ -72,4 +72,4 @@ obj-$(CONFIG_QSEECOM) += qseecom.o
 obj-$(CONFIG_QFP_FUSE) += qfp_fuse.o
 obj-$(CONFIG_TI_DRV2667) += ti_drv2667.o
 obj-$(CONFIG_QPNP_MISC) += qpnp-misc.o
-obj-$(CONFIG_CCLOGIC)		+= cclogic/
+obj-y += hw_ver.o

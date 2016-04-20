@@ -13,7 +13,6 @@
 &mdss_mdp {
 		dsi_boe_nt35598_WQHD_vid1: qcom,mdss_dsi_nt35598_WQHD_dual_mipi1_video {
 		/*compatible = "qcom,mdss-dsi-panel";*/
-		qcom,cont-splash-enabled;
 		qcom,mdss-dsi-panel-name = "BOE WQHD video mode dsi panel 1";
 		qcom,mdss-dsi-panel-controller = <&mdss_dsi1>;
 		qcom,mdss-dsi-panel-type = "dsi_video_mode";
@@ -49,18 +48,6 @@
 		qcom,mdss-dsi-lane-3-state;
 		qcom,mdss-dsi-panel-timings = [ef 38 25 00 67 70  
 			29 3c 2c 03 04 00];
-
-		cm,mdss-livedisplay-cabc-cmd = [
-			15 01 00 00 10 00 02 55 00];
-		cm,mdss-livedisplay-cabc-ui-value = <0x01>;
-		cm,mdss-livedisplay-cabc-image-value = <0x02>;
-		cm,mdss-livedisplay-cabc-video-value = <0x03>;
-		cm,mdss-livedisplay-sre-weak-value = <0x50>;
-		cm,mdss-livedisplay-sre-medium-value = <0x60>;
-		cm,mdss-livedisplay-sre-strong-value = <0x70>;
-		cm,mdss-livedisplay-aco-value = <0x80>;
-		cm,mdss-livedisplay-post-cmd = [
-			15 01 00 00 14 00 02 29 00];
 		qcom,mdss-dsi-t-clk-post = <0x20>;
 		qcom,mdss-dsi-t-clk-pre = <0x3e>;
 		qcom,mdss-dsi-bl-min-level = <1>;

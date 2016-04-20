@@ -4,7 +4,7 @@
  *  Copyright (C)  2001 Russell King
  *            (C)  2003 Venkatesh Pallipadi <venkatesh.pallipadi@intel.com>.
  *                      Jun Nakajima <jun.nakajima@intel.com>
- *            (c)  2013, 2015 The Linux Foundation. All rights reserved.
+ *            (c)  2013 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -56,6 +56,9 @@
  */
 #define MIN_SAMPLING_RATE_RATIO			(2)
 
+extern wait_queue_head_t display_qos_load;
+extern atomic_t commits_qos_param;
+
 static unsigned int min_sampling_rate;
 
 #define LATENCY_MULTIPLIER			(1000)
@@ -65,6 +68,7 @@ static unsigned int min_sampling_rate;
 #define POWERSAVE_BIAS_MAXLEVEL			(1000)
 #define POWERSAVE_BIAS_MINLEVEL			(-1000)
 
+static unsigned find_target_freq(struct cpufreq_policy *policy, unsigned freq, unsigned int relation);
 static void do_dbs_timer(struct work_struct *work);
 static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				unsigned int event);
@@ -97,6 +101,7 @@ struct cpu_dbs_info_s {
 	unsigned int prev_load;
 	unsigned int max_load;
 	int cpu;
+    volatile unsigned int boost_jiffies;
 	unsigned int sample_type:1;
 	/*
 	 * percpu mutex that serializes governor limit change with
@@ -108,7 +113,6 @@ struct cpu_dbs_info_s {
 	struct task_struct *sync_thread;
 	wait_queue_head_t sync_wq;
 	atomic_t src_sync_cpu;
-	atomic_t being_woken;
 	atomic_t sync_enabled;
 };
 static DEFINE_PER_CPU(struct cpu_dbs_info_s, od_cpu_dbs_info);
@@ -116,7 +120,7 @@ static DEFINE_PER_CPU(struct cpu_dbs_info_s, od_cpu_dbs_info);
 static inline void dbs_timer_init(struct cpu_dbs_info_s *dbs_info);
 static inline void dbs_timer_exit(struct cpu_dbs_info_s *dbs_info);
 
-static unsigned int dbs_enable;	/* number of CPUs using this policy */
+static unsigned int dbs_enable = 0;	/* number of CPUs using this policy */
 
 /*
  * dbs_mutex protects dbs_enable and dbs_info during start/stop.
@@ -145,7 +149,20 @@ static struct dbs_tuners {
 	unsigned int sampling_down_factor;
 	int          powersave_bias;
 	unsigned int io_is_busy;
+    //For power, breakdown continuous input_event
+	struct timespec prev_input_t;
+    unsigned input_interval;
 	unsigned int input_boost;
+    //For performance, add the boost time.
+    unsigned int boost_time;
+
+//For power, display qos check
+	struct task_struct *disp_qos_thread;
+	struct timespec cur_time;
+	struct timespec prev_time;
+	atomic_t dis_qos_count;
+	unsigned fb_qos_freq;
+
 } dbs_tuners_ins = {
 	.up_threshold_multi_core = DEF_FREQUENCY_UP_THRESHOLD,
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
@@ -157,7 +174,10 @@ static struct dbs_tuners {
 	.powersave_bias = 0,
 	.sync_freq = 0,
 	.optimal_freq = 0,
+    .input_interval = 0,
 	.input_boost = 0,
+    .boost_time = 0,
+	.fb_qos_freq = 0,
 };
 
 static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
@@ -323,7 +343,10 @@ show_one(down_differential_multi_core, down_differential_multi_core);
 show_one(optimal_freq, optimal_freq);
 show_one(up_threshold_any_cpu_load, up_threshold_any_cpu_load);
 show_one(sync_freq, sync_freq);
+show_one(input_interval, input_interval);
 show_one(input_boost, input_boost);
+show_one(boost_time, boost_time);
+show_one(fb_qos_freq, fb_qos_freq);
 
 static ssize_t show_powersave_bias
 (struct kobject *kobj, struct attribute *attr, char *buf)
@@ -410,6 +433,18 @@ static ssize_t store_input_boost(struct kobject *a, struct attribute *b,
 	if (ret != 1)
 		return -EINVAL;
 	dbs_tuners_ins.input_boost = input;
+	return count;
+}
+
+static ssize_t store_boost_time(struct kobject *a, struct attribute *b,
+				const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+	dbs_tuners_ins.boost_time = input;
 	return count;
 }
 
@@ -703,6 +738,32 @@ skip_this_cpu_bypass:
 	return count;
 }
 
+static ssize_t store_input_interval(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+	dbs_tuners_ins.input_interval = input;
+
+	return count;
+}
+
+static ssize_t store_fb_qos_freq(struct kobject *a, struct attribute *b,
+						const char *buf, size_t count)
+{
+       unsigned int input;
+       int ret;
+       ret = sscanf(buf, "%u", &input);
+       if (ret != 1)
+              return -EINVAL;
+       dbs_tuners_ins.fb_qos_freq = input;
+       return count;
+}
+
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
@@ -715,7 +776,14 @@ define_one_global_rw(down_differential_multi_core);
 define_one_global_rw(optimal_freq);
 define_one_global_rw(up_threshold_any_cpu_load);
 define_one_global_rw(sync_freq);
+//For power, add input interval debug interface
+define_one_global_rw(input_interval);
 define_one_global_rw(input_boost);
+//For preformance: add boost time sys interface,
+//this sys node will improve interactive power.
+define_one_global_rw(boost_time);
+//For power, higher fps app can use the max freq.
+define_one_global_rw(fb_qos_freq);
 
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
@@ -731,7 +799,10 @@ static struct attribute *dbs_attributes[] = {
 	&optimal_freq.attr,
 	&up_threshold_any_cpu_load.attr,
 	&sync_freq.attr,
+	&input_interval.attr,
 	&input_boost.attr,
+	&boost_time.attr,
+	&fb_qos_freq.attr,
 	NULL
 };
 
@@ -752,7 +823,7 @@ static void dbs_freq_increase(struct cpufreq_policy *p, unsigned int freq)
 	__cpufreq_driver_target(p, freq, dbs_tuners_ins.powersave_bias ?
 			CPUFREQ_RELATION_L : CPUFREQ_RELATION_H);
 }
-
+#define FPS_THRESHOLD 3 //3 Display frame
 static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 {
 	/* Extrapolated load of this CPU */
@@ -763,10 +834,13 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 	unsigned int max_load_other_cpu = 0;
 	struct cpufreq_policy *policy;
 	unsigned int j;
+    unsigned target, sync = dbs_tuners_ins.sync_freq;
+    unsigned optimal = dbs_tuners_ins.optimal_freq;
+
 
 	this_dbs_info->freq_lo = 0;
 	policy = this_dbs_info->cur_policy;
-
+    target = policy->max * 7 / 10;
 	/*
 	 * Every sampling_rate, we check, if current idle time is less
 	 * than 20% (default), then we try to increase frequency
@@ -884,7 +958,40 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		if (policy->cur < policy->max)
 			this_dbs_info->rate_mult =
 				dbs_tuners_ins.sampling_down_factor;
-		dbs_freq_increase(policy, policy->max);
+#if 0
+	//int qos = atomic_read(&dbs_tuners_ins.dis_qos_count);
+		if(qos >= FPS_THRESHOLD)
+		{
+			if(policy->cur > dbs_tuners_ins.fb_qos_freq)
+			__cpufreq_driver_target(policy,
+			dbs_tuners_ins.fb_qos_freq,
+			CPUFREQ_RELATION_H);
+			else
+			{
+				//Keep CPU frequency up 1G
+				target = 1000000;
+				target = find_target_freq(policy, target, CPUFREQ_RELATION_L);
+				target = min(target, policy->max);
+				if(policy->cur < target)
+					__cpufreq_driver_target(policy, target, CPUFREQ_RELATION_H);
+			}
+			return;
+		}
+#endif
+
+        //For power: reduce the chance that CPU running at 2.5G
+        if(policy->cur < dbs_tuners_ins.input_boost)
+            target = dbs_tuners_ins.input_boost;
+        else
+        {
+            target = find_target_freq(policy, target, CPUFREQ_RELATION_L);
+            if(policy->cur >= target)
+                target = find_target_freq(policy, policy->cur + 1, CPUFREQ_RELATION_L);
+        }
+        if(target > policy->max)
+            target = policy->max;
+        dbs_freq_increase(policy, target);
+
 		return;
 	}
 
@@ -893,16 +1000,22 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		if (max_load_other_cpu >
 				dbs_tuners_ins.up_threshold_any_cpu_load) {
 			if (policy->cur < dbs_tuners_ins.sync_freq)
-				dbs_freq_increase(policy,
-						dbs_tuners_ins.sync_freq);
+            {
+                if(dbs_tuners_ins.sync_freq > policy->max)
+                    sync = policy->max;
+				dbs_freq_increase(policy, sync);
+            }
 			return;
 		}
 
 		if (max_load_freq > dbs_tuners_ins.up_threshold_multi_core *
 								policy->cur) {
 			if (policy->cur < dbs_tuners_ins.optimal_freq)
-				dbs_freq_increase(policy,
-						dbs_tuners_ins.optimal_freq);
+            {
+                if(dbs_tuners_ins.optimal_freq > policy->max)
+                    optimal = policy->max;
+				dbs_freq_increase(policy, optimal);
+            }
 			return;
 		}
 	}
@@ -924,6 +1037,25 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		freq_next = max_load_freq /
 				(dbs_tuners_ins.up_threshold -
 				 dbs_tuners_ins.down_differential);
+
+        //For Performance, forbid decrease freq.
+        if(dbs_tuners_ins.boost_time)
+        {
+            if(jiffies_to_msecs((long)jiffies
+                - (long)this_dbs_info->boost_jiffies)
+                < dbs_tuners_ins.boost_time)
+            {
+                //For power&thermal, prevent CPU to keep on max frequency,
+                //decrease frequency to 2G.
+                if(policy->cur == policy->max)
+                {
+                    freq_next = policy->max * 3 / 4;
+                    __cpufreq_driver_target(policy, freq_next,
+                        CPUFREQ_RELATION_L);
+                }
+                return;
+            }
+        }
 
 		/* No longer fully busy, reset rate_mult */
 		this_dbs_info->rate_mult = 1;
@@ -981,6 +1113,8 @@ static void do_dbs_timer(struct work_struct *work)
 		} else {
 			delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate
 				* dbs_info->rate_mult);
+			if (num_online_cpus() > 1)
+				delay -= jiffies % delay;
 		}
 	} else {
 		__cpufreq_driver_target(dbs_info->cur_policy,
@@ -1032,6 +1166,15 @@ static int should_io_be_busy(void)
 	return 0;
 }
 
+static unsigned find_target_freq(struct cpufreq_policy *policy, unsigned freq, unsigned int relation)
+{
+    unsigned index = 0;
+    struct cpufreq_frequency_table* table = cpufreq_frequency_get_table(policy->cpu);
+
+    cpufreq_frequency_table_target(policy, table, freq, relation, &index);
+    return table[index].frequency;
+}
+
 static void dbs_refresh_callback(struct work_struct *work)
 {
 	struct cpufreq_policy *policy;
@@ -1056,7 +1199,11 @@ static void dbs_refresh_callback(struct work_struct *work)
 	}
 
 	if (dbs_tuners_ins.input_boost)
+    {
 		target_freq = dbs_tuners_ins.input_boost;
+        if(target_freq > policy->max)
+            target_freq = policy->max;
+    }
 	else
 		target_freq = policy->max;
 
@@ -1072,6 +1219,9 @@ static void dbs_refresh_callback(struct work_struct *work)
 		this_dbs_info->prev_cpu_idle = get_cpu_idle_time(cpu,
 				&this_dbs_info->prev_cpu_wall);
 	}
+    //For performance: update the boost jiffies.
+    if(dbs_tuners_ins.boost_time)
+        this_dbs_info->boost_jiffies = jiffies;
 
 bail_incorrect_governor:
 	unlock_policy_rwsem_write(cpu);
@@ -1088,16 +1238,7 @@ static int dbs_migration_notify(struct notifier_block *nb,
 		&per_cpu(od_cpu_dbs_info, target_cpu);
 
 	atomic_set(&target_dbs_info->src_sync_cpu, (int)arg);
-	/*
-	* Avoid issuing recursive wakeup call, as sync thread itself could be
-	* seen as migrating triggering this notification. Note that sync thread
-	* of a cpu could be running for a short while with its affinity broken
-	* because of CPU hotplug.
-	*/
-	if (!atomic_cmpxchg(&target_dbs_info->being_woken, 0, 1)) {
-		wake_up(&target_dbs_info->sync_wq);
-		atomic_set(&target_dbs_info->being_woken, 0);
-	}
+	wake_up(&target_dbs_info->sync_wq);
 
 	return NOTIFY_OK;
 }
@@ -1168,6 +1309,12 @@ static int dbs_sync_thread(void *data)
 			 * Arch specific cpufreq driver may fail.
 			 * Don't update governor frequency upon failure.
 			 */
+            if(src_freq > policy->max)
+                src_freq = policy->max;
+#if 0
+        	if(atomic_read(&dbs_tuners_ins.dis_qos_count) > FPS_THRESHOLD)
+			src_freq = min(src_freq, dbs_tuners_ins.fb_qos_freq);
+#endif
 			if (__cpufreq_driver_target(policy, src_freq,
 						    CPUFREQ_RELATION_L) >= 0) {
 				policy->cur = src_freq;
@@ -1193,20 +1340,71 @@ bail_acq_sema_failed:
 
 	return 0;
 }
-
+#if 0
+#define DISPLAY_30FPS_TIME 34000000 //30 FPS
+#define DISPLAY_60FPS_TIME 17000000 //60 FPS
+static void do_calc_qos(void)
+{
+	long long delta;
+	getnstimeofday(&dbs_tuners_ins.cur_time);
+	delta = timespec_to_ns(&dbs_tuners_ins.cur_time) - timespec_to_ns(&dbs_tuners_ins.prev_time);
+	if(delta > DISPLAY_30FPS_TIME)
+	{
+		atomic_set(&dbs_tuners_ins.dis_qos_count, 0);
+		goto end_qos;
+	}
+	atomic_inc(&dbs_tuners_ins.dis_qos_count);
+end_qos:
+	getnstimeofday(&dbs_tuners_ins.prev_time);
+}
+static int __disp_qos_thread(void *data)
+{
+	int result = 0;
+       struct sched_param param;
+       param.sched_priority = 16;
+       result = sched_setscheduler(current, SCHED_FIFO, &param);
+	if(result)
+		pr_warn("Set priority failed for QoS thread\n");
+	result = 0;
+	getnstimeofday(&dbs_tuners_ins.prev_time);
+	while(1)
+	{
+		wait_event(display_qos_load, ((atomic_read(&commits_qos_param)
+			|| kthread_should_stop()) && dbs_enable));
+		if (kthread_should_stop())
+			break;
+		do_calc_qos();
+		atomic_dec(&commits_qos_param);
+	}
+	atomic_set(&commits_qos_param, 0);
+	return result;
+}
+#endif
 static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
 	int i;
+	long long delta;
+	struct timespec cur_time;
+
+	getnstimeofday(&cur_time);
+	delta = timespec_to_ns(&cur_time)
+			- timespec_to_ns(&dbs_tuners_ins.prev_input_t);
+
+	if(dbs_tuners_ins.input_interval
+			&& delta < dbs_tuners_ins.input_interval * 1000 * 1000)
+		goto exited;
 
 	if ((dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MAXLEVEL) ||
 		(dbs_tuners_ins.powersave_bias == POWERSAVE_BIAS_MINLEVEL)) {
 		/* nothing to do */
-		return;
+		goto exited;
 	}
 
 	for_each_online_cpu(i)
 		queue_work_on(i, dbs_wq, &per_cpu(dbs_refresh_work, i).work);
+exited:
+	getnstimeofday(&dbs_tuners_ins.prev_input_t);
 }
 
 static int dbs_input_connect(struct input_handler *handler,
@@ -1247,6 +1445,8 @@ static void dbs_input_disconnect(struct input_handle *handle)
 }
 
 static const struct input_device_id dbs_ids[] = {
+	{ .driver_info = 1 },
+#if 0
 	/* multi-touch touchscreen */
 	{
 		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
@@ -1269,6 +1469,7 @@ static const struct input_device_id dbs_ids[] = {
 		.flags = INPUT_DEVICE_ID_MATCH_EVBIT,
 		.evbit = { BIT_MASK(EV_KEY) },
 	},
+#endif
 	{ },
 };
 
@@ -1352,7 +1553,12 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 					&dbs_migration_nb);
 		}
 		if (!cpu)
+        {
 			rc = input_register_handler(&dbs_input_handler);
+		getnstimeofday(&dbs_tuners_ins.prev_input_t);
+	    dbs_tuners_ins.fb_qos_freq = policy->max;
+        }
+        this_dbs_info->boost_jiffies = 0;
 		mutex_unlock(&dbs_mutex);
 
 
@@ -1393,7 +1599,10 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		break;
 
 	case CPUFREQ_GOV_LIMITS:
+		mutex_lock(&dbs_mutex);
 		mutex_lock(&this_dbs_info->timer_mutex);
+		if(this_dbs_info->cur_policy)
+		{
 		if (policy->max < this_dbs_info->cur_policy->cur)
 			__cpufreq_driver_target(this_dbs_info->cur_policy,
 				policy->max, CPUFREQ_RELATION_H);
@@ -1405,7 +1614,9 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				this_dbs_info->cur_policy,
 				policy,
 				dbs_tuners_ins.powersave_bias);
+		}
 		mutex_unlock(&this_dbs_info->timer_mutex);
+		mutex_unlock(&dbs_mutex);
 		break;
 	}
 	return 0;
@@ -1452,14 +1663,22 @@ static int __init cpufreq_gov_dbs_init(void)
 		dbs_work->cpu = i;
 
 		atomic_set(&this_dbs_info->src_sync_cpu, -1);
-		atomic_set(&this_dbs_info->being_woken, 0);
 		init_waitqueue_head(&this_dbs_info->sync_wq);
 
 		this_dbs_info->sync_thread = kthread_run(dbs_sync_thread,
 							 (void *)i,
 							 "dbs_sync/%d", i);
 	}
-
+#if 0
+	atomic_set(&dbs_tuners_ins.dis_qos_count, 0);
+	dbs_tuners_ins.disp_qos_thread = kthread_run(__disp_qos_thread, NULL, "fb_qos");
+	if(IS_ERR(dbs_tuners_ins.disp_qos_thread))
+	{
+		pr_err("ERROR-%ld: Unable to start fb_qos\n",
+		PTR_ERR(dbs_tuners_ins.disp_qos_thread));
+		dbs_tuners_ins.disp_qos_thread = NULL;
+	}
+#endif
 	return cpufreq_register_governor(&cpufreq_gov_ondemand);
 }
 
@@ -1474,6 +1693,7 @@ static void __exit cpufreq_gov_dbs_exit(void)
 		mutex_destroy(&this_dbs_info->timer_mutex);
 		kthread_stop(this_dbs_info->sync_thread);
 	}
+	kthread_stop(dbs_tuners_ins.disp_qos_thread);
 	destroy_workqueue(dbs_wq);
 }
 

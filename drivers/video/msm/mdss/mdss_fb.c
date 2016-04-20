@@ -2,7 +2,7 @@
  * Core MDSS framebuffer driver.
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2014, The Linux Foundation. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -54,18 +54,20 @@
 
 #include "mdss_fb.h"
 #include "mdss_mdp_splash_logo.h"
-
-#include "mdss_livedisplay.h"
+#include "lcd_effect.h"
 
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MDSS_FB_NUM 3
 #else
 #define MDSS_FB_NUM 2
 #endif
-
+extern struct panel_effect_data lcd_data;
 #define MAX_FBI_LIST 32
+struct msm_fb_data_type *mfd_priv;
 static struct fb_info *fbi_list[MAX_FBI_LIST];
 static int fbi_list_index;
+extern wait_queue_head_t display_qos_load;
+extern atomic_t commits_qos_param;
 
 static u32 mdss_fb_pseudo_palette[16] = {
 	0x00000000, 0xffffffff, 0xffffffff, 0xffffffff,
@@ -103,6 +105,10 @@ static int mdss_fb_pan_idle(struct msm_fb_data_type *mfd);
 static int mdss_fb_send_panel_event(struct msm_fb_data_type *mfd,
 					int event, void *arg);
 static void mdss_fb_set_mdp_sync_pt_threshold(struct msm_fb_data_type *mfd);
+/****zhujp2 kpdbl enable start*/
+extern int qpnp_kpdbl_enable(bool onoff,int brightness);
+/*****zhujp2 kpdbl enable end*/
+
 void mdss_fb_no_update_notify_timer_cb(unsigned long data)
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)data;
@@ -154,31 +160,13 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 	if (notify > NOTIFY_UPDATE_POWER_OFF)
 		return -EINVAL;
 
-	if (notify == NOTIFY_UPDATE_INIT) {
-		mutex_lock(&mfd->update.lock);
-		mfd->update.init_done = true;
-		mutex_unlock(&mfd->update.lock);
-		ret = 1;
-	} else if (notify == NOTIFY_UPDATE_DEINIT) {
-		mutex_lock(&mfd->update.lock);
-		mfd->update.init_done = false;
-		mutex_unlock(&mfd->update.lock);
-		complete(&mfd->update.comp);
-		complete(&mfd->no_update.comp);
-		ret = 1;
-	} else if (mfd->update.is_suspend) {
+	if (mfd->update.is_suspend) {
 		to_user = NOTIFY_TYPE_SUSPEND;
 		mfd->update.is_suspend = 0;
 		ret = 1;
 	} else if (notify == NOTIFY_UPDATE_START) {
+		INIT_COMPLETION(mfd->update.comp);
 		mutex_lock(&mfd->update.lock);
-		if (mfd->update.init_done)
-			INIT_COMPLETION(mfd->update.comp);
-		else {
-			mutex_unlock(&mfd->update.lock);
-			pr_err("notify update start called without init\n");
-			return -EINVAL;
-		}
 		mfd->update.ref_count++;
 		mutex_unlock(&mfd->update.lock);
 		ret = wait_for_completion_interruptible_timeout(
@@ -192,15 +180,7 @@ static int mdss_fb_notify_update(struct msm_fb_data_type *mfd,
 			ret = 1;
 		}
 	} else if (notify == NOTIFY_UPDATE_STOP) {
-		mutex_lock(&mfd->update.lock);
-		if (mfd->update.init_done)
-			INIT_COMPLETION(mfd->no_update.comp);
-		else {
-			mutex_unlock(&mfd->update.lock);
-			pr_err("notify update stop called without init\n");
-			return -EINVAL;
-		}
-		mutex_unlock(&mfd->update.lock);
+		INIT_COMPLETION(mfd->no_update.comp);
 		mutex_lock(&mfd->no_update.lock);
 		mfd->no_update.ref_count++;
 		mutex_unlock(&mfd->no_update.lock);
@@ -406,6 +386,32 @@ static ssize_t mdss_fb_get_idle_notify(struct device *dev,
 
 	return ret;
 }
+static ssize_t mdss_panel_set_type(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	unsigned long enable;
+
+	if (kstrtoul(buf, 0, &enable))
+		return -EINVAL;
+
+	if (enable) {
+		mdss_fb_blank_sub(FB_BLANK_UNBLANK, fbi, 1);
+	} else {
+		mdss_fb_blank_sub(FB_BLANK_POWERDOWN, fbi, 1);
+	}
+
+	return count;
+}
+#ifdef ESD_FOR_LCD
+void lcd_reset_handle(void)
+{
+	printk("%s detect the esd, so reset lcd\n", __func__);
+	mdss_fb_blank_sub(FB_BLANK_POWERDOWN, mfd_priv->fbi, 1);
+	msleep(20);
+	mdss_fb_blank_sub(FB_BLANK_UNBLANK, mfd_priv->fbi, 1);
+}
+#endif
 
 static ssize_t mdss_fb_get_panel_info(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -511,9 +517,250 @@ static int mdss_fb_lpm_enable(struct msm_fb_data_type *mfd, int mode)
 	return 0;
 }
 
+static ssize_t mdss_get_panel_name(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret;
+
+	ret = snprintf(buf, PAGE_SIZE, "R63319_LH600QH1_LGD_1440_2560_5.98\n");
+
+	return ret;
+}
+
+static ssize_t mdss_panel_get_ce(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	ret = get_effect_index_by_name("ce", &lcd_data);
+	if (ret < 0) {
+		ret = get_effect_index_by_name("饱和度", &lcd_data);
+		if (ret < 0)
+			return -EINVAL;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", lcd_data.effect_data->effect[ret].level);
+	return ret;
+}
+
+static ssize_t mdss_panel_get_cabc(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	ret = get_effect_index_by_name("cabc", &lcd_data);
+	if (ret < 0) {
+		ret = get_effect_index_by_name("动态背光", &lcd_data);
+		if (ret < 0)
+			return -EINVAL;
+	}
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", lcd_data.effect_data->effect[ret].level);
+	return ret;
+}
+static ssize_t mdss_panel_get_dimming(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+
+	ret = snprintf(buf, PAGE_SIZE, "not support\n");
+	return ret;
+}
+static ssize_t mdss_panel_set_cabc(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct hal_panel_ctrl_data ctrl;
+	unsigned long level;
+	int ret;
+
+	if (kstrtoul(buf, 0, &level))
+		return -EINVAL;
+	ret = get_effect_index_by_name("cabc", &lcd_data);
+	if (ret < 0) {
+		ret = get_effect_index_by_name("动态背光", &lcd_data);
+		if (ret < 0)
+			return -EINVAL;
+	}
+	ctrl.index = ret;
+	ctrl.level = level;
+	ctrl.id = SET_EFFECT;
+	ret = handle_lcd_effect_data(mfd, &lcd_data, &ctrl);
+
+	return count;
+}
+
+static ssize_t mdss_panel_set_ce(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct hal_panel_ctrl_data ctrl;
+	unsigned long level;
+	int ret;
+
+	if (kstrtoul(buf, 0, &level))
+		return -EINVAL;
+
+	ret = get_effect_index_by_name("ce", &lcd_data);
+	if (ret < 0) {
+		ret = get_effect_index_by_name("饱和度", &lcd_data);
+		if (ret < 0)
+			return -EINVAL;
+	}
+	ctrl.id = SET_EFFECT;
+	ctrl.index = ret;
+	ctrl.level = level;
+	ret = handle_lcd_effect_data(mfd, &lcd_data, &ctrl);
+
+	return count;
+}
+
+static ssize_t mdss_panel_set_dimming(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	unsigned long mode;
+
+	if (kstrtoul(buf, 0, &mode))
+		return -EINVAL;
+
+	return count;
+}
+
+static ssize_t mdss_panel_set_effect(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct hal_panel_ctrl_data ctrl;
+	unsigned long data;
+	int index, level, ret;
+
+	if (kstrtoul(buf, 0, &data))
+		return -EINVAL;
+
+	index = (data >> 4) & 0xf;
+	level = data & 0xf;
+	if (index > lcd_data.effect_data->supported_effect)
+		return -EINVAL;
+
+	ctrl.id = SET_EFFECT;
+	ctrl.level = level;
+	ctrl.index = index;
+	ret = handle_lcd_effect_data(mfd, &lcd_data, &ctrl);
+
+	return count;
+}
+
+static ssize_t mdss_panel_get_effect(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	unsigned long index;
+
+	if (kstrtoul(buf, 0, &index))
+		return -EINVAL;
+
+	if (index > lcd_data.effect_data->supported_effect)
+		return -EINVAL;
+
+	return lcd_data.effect_data->effect[index].level;
+}
+
+static ssize_t mdss_get_bl_gpio_level(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct hal_panel_ctrl_data ctrl;
+	int ret;
+
+	ctrl.id = GET_BL_LEVEL;
+
+	ret = snprintf(buf, PAGE_SIZE, "%d\n", handle_lcd_effect_data(mfd, &lcd_data, &ctrl));
+
+	return ret;
+}
+static ssize_t mdss_set_bl_gpio_level(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct hal_panel_ctrl_data ctrl;
+	unsigned long index;
+	int ret;
+
+	if (kstrtoul(buf, 0, &index))
+		return -EINVAL;
+
+	ctrl.id = SET_BL_LEVEL;
+	ctrl.level = index;
+	ret = handle_lcd_effect_data(mfd, &lcd_data, &ctrl);
+
+	return count;
+}
+static ssize_t mdss_panel_set_mode(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
+	struct hal_panel_ctrl_data ctrl;
+	unsigned long index;
+	int ret;
+
+	if (kstrtoul(buf, 0, &index))
+		return -EINVAL;
+
+	if (index > lcd_data.mode_data->supported_mode)
+		return -EINVAL;
+
+	ctrl.id = SET_MODE;
+	ctrl.mode = index;
+	ret = handle_lcd_effect_data(mfd, &lcd_data, &ctrl);
+
+	return count;
+}
+
+
+static ssize_t mdss_panel_get_mode(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	int index = lcd_data.mode_data->current_mode;
+
+	ret = snprintf(buf, PAGE_SIZE, "%s\n", lcd_data.mode_data->mode[index].name);
+
+	return ret;
+}
+static ssize_t mdss_get_lcd_supported_effect(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	int i;
+
+	for (i = 0; i < lcd_data.effect_data->supported_effect; i++) {
+		ret += snprintf(buf + ret, PAGE_SIZE, "%s\n", lcd_data.effect_data->effect[i].name);
+	}
+
+	return ret;
+}
+
+static ssize_t mdss_get_lcd_supported_mode(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	int i;
+
+	for (i = 0; i < lcd_data.mode_data->supported_mode; i++) {
+		ret += snprintf(buf + ret, PAGE_SIZE, "%s\n", lcd_data.mode_data->mode[i].name);
+	}
+
+	return ret;
+}
+
+
+static DEVICE_ATTR(msm_panel_ctrl, S_IRUGO | S_IWUSR | S_IWGRP, NULL, mdss_panel_set_type);
 static DEVICE_ATTR(msm_fb_type, S_IRUGO, mdss_fb_get_type, NULL);
 static DEVICE_ATTR(msm_fb_split, S_IRUGO, mdss_fb_get_split, NULL);
 static DEVICE_ATTR(show_blank_event, S_IRUGO, mdss_mdp_show_blank_event, NULL);
+static DEVICE_ATTR(lcd_name, S_IRUGO | S_IWUSR | S_IWGRP,  mdss_get_panel_name, NULL);
+static DEVICE_ATTR(ce_onoff, S_IRUGO | S_IWUSR | S_IWGRP, mdss_panel_get_ce, mdss_panel_set_ce);
+static DEVICE_ATTR(cabc_onoff, S_IRUGO | S_IWUSR | S_IWGRP, mdss_panel_get_cabc, mdss_panel_set_cabc);
+static DEVICE_ATTR(dimming_onoff, S_IRUGO | S_IWUSR | S_IWGRP, mdss_panel_get_dimming, mdss_panel_set_dimming);
+static DEVICE_ATTR(lcd_effect, S_IRUGO | S_IWUSR | S_IWGRP, mdss_panel_get_effect, mdss_panel_set_effect);
+static DEVICE_ATTR(lcd_mode, S_IRUGO | S_IWUSR | S_IWGRP, mdss_panel_get_mode, mdss_panel_set_mode);
+static DEVICE_ATTR(lcd_supported_effect, S_IRUGO | S_IWUSR | S_IWGRP, mdss_get_lcd_supported_effect, NULL);
+static DEVICE_ATTR(lcd_supported_mode, S_IRUGO | S_IWUSR | S_IWGRP, mdss_get_lcd_supported_mode, NULL);
+static DEVICE_ATTR(bl_level, S_IRUGO | S_IWUSR | S_IWGRP, mdss_get_bl_gpio_level, mdss_set_bl_gpio_level);
 static DEVICE_ATTR(idle_time, S_IRUGO | S_IWUSR | S_IWGRP,
 	mdss_fb_get_idle_time, mdss_fb_set_idle_time);
 static DEVICE_ATTR(idle_notify, S_IRUGO, mdss_fb_get_idle_notify, NULL);
@@ -523,6 +770,16 @@ static struct attribute *mdss_fb_attrs[] = {
 	&dev_attr_msm_fb_type.attr,
 	&dev_attr_msm_fb_split.attr,
 	&dev_attr_show_blank_event.attr,
+	&dev_attr_msm_panel_ctrl.attr,
+	&dev_attr_lcd_name.attr,
+	&dev_attr_bl_level.attr,
+	&dev_attr_ce_onoff.attr,
+	&dev_attr_cabc_onoff.attr,
+	&dev_attr_dimming_onoff.attr,
+	&dev_attr_lcd_supported_effect.attr,
+	&dev_attr_lcd_supported_mode.attr,
+	&dev_attr_lcd_effect.attr,
+	&dev_attr_lcd_mode.attr,
 	&dev_attr_idle_time.attr,
 	&dev_attr_idle_notify.attr,
 	&dev_attr_msm_fb_panel_info.attr,
@@ -540,8 +797,7 @@ static int mdss_fb_create_sysfs(struct msm_fb_data_type *mfd)
 	rc = sysfs_create_group(&mfd->fbi->dev->kobj, &mdss_fb_attr_group);
 	if (rc)
 		pr_err("sysfs group creation failed, rc=%d\n", rc);
-
-	return mdss_livedisplay_create_sysfs(mfd);
+	return rc;
 }
 
 static void mdss_fb_remove_sysfs(struct msm_fb_data_type *mfd)
@@ -601,6 +857,9 @@ static int mdss_fb_probe(struct platform_device *pdev)
 	mfd->fb_imgType = MDP_RGBA_8888;
 
 	mfd->pdev = pdev;
+	//if broadcast mode = 1, then use index = 1 mfd else use index = 0
+	if (mfd->index == 1)
+		mfd_priv = mfd;
 	if (pdata->next)
 		mfd->split_display = true;
 	mfd->mdp = *mdp_instance;
@@ -933,8 +1192,6 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 		if (mfd->mdp.ad_calc_bl)
 			(*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
 					&bl_notify_needed);
-		if (bl_notify_needed)
-			mdss_fb_bl_update_notify(mfd);
 
 		mfd->bl_level_prev_scaled = mfd->bl_level_scaled;
 		if (!IS_CALIB_MODE_BL(mfd))
@@ -954,7 +1211,10 @@ void mdss_fb_set_backlight(struct msm_fb_data_type *mfd, u32 bkl_lvl)
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level = bkl_lvl;
 			mfd->bl_level_scaled = temp;
+			bl_notify_needed = true;
 		}
+		if (bl_notify_needed)
+			mdss_fb_bl_update_notify(mfd);
 	}
 }
 
@@ -973,11 +1233,10 @@ void mdss_fb_update_backlight(struct msm_fb_data_type *mfd)
 			if (mfd->mdp.ad_calc_bl)
 				(*mfd->mdp.ad_calc_bl)(mfd, temp, &temp,
 						&bl_notify);
-			if (bl_notify)
-				mdss_fb_bl_update_notify(mfd);
 			pdata->set_backlight(pdata, temp);
 			mfd->bl_level_scaled = mfd->unset_bl_level;
 			mfd->bl_updated = 1;
+			mdss_fb_bl_update_notify(mfd);
 		}
 	}
 	mutex_unlock(&mfd->bl_lock);
@@ -988,7 +1247,10 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 {
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
 	int ret = 0;
-
+/*zhujp2 kpdbl enable start*/
+	if(mfd->panel_power_on)
+		qpnp_kpdbl_enable(0,0);
+/*zhujp2 kpdbl enable end*/
 	if (!op_enable)
 		return -EPERM;
 
@@ -1067,7 +1329,8 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 {
 	struct mdss_panel_data *pdata;
 	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)info->par;
-
+	int ret;
+	
 	mdss_fb_pan_idle(mfd);
 	if (mfd->op_enable == 0) {
 		if (blank_mode == FB_BLANK_UNBLANK)
@@ -1076,7 +1339,7 @@ static int mdss_fb_blank(int blank_mode, struct fb_info *info)
 			mfd->suspend.panel_power_on = false;
 		return 0;
 	}
-	pr_debug("mode: %d\n", blank_mode);
+	ret = mdss_fb_blank_sub(blank_mode, info, mfd->op_enable);
 
 	pdata = dev_get_platdata(&mfd->pdev->dev);
 
@@ -1667,7 +1930,6 @@ static int mdss_fb_register(struct msm_fb_data_type *mfd)
 	mfd->no_update.timer.data = (unsigned long)mfd;
 	mfd->update.ref_count = 0;
 	mfd->no_update.ref_count = 0;
-	mfd->update.init_done = false;
 	init_completion(&mfd->update.comp);
 	init_completion(&mfd->no_update.comp);
 	init_completion(&mfd->power_off_comp);
@@ -2274,6 +2536,8 @@ static int __mdss_fb_display_thread(void *data)
 		ret = __mdss_fb_perform_commit(mfd);
 		atomic_dec(&mfd->commits_pending);
 		wake_up_all(&mfd->idle_wait_q);
+		atomic_inc(&commits_qos_param);
+		wake_up_all(&display_qos_load);
 	}
 
 	atomic_set(&mfd->commits_pending, 0);
@@ -2762,6 +3026,28 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 	return ret;
 }
 
+static int mdss_fb_panel_effect(struct msm_fb_data_type *mfd,
+						unsigned long *argp)
+{
+	int ret, rc;
+	struct hal_panel_ctrl_data data;
+	ret = copy_from_user(&data, argp,
+			sizeof(data));
+	if (ret) {
+		pr_err("%s:copy_from_user failed", __func__);
+		return ret;
+	}
+
+	ret = handle_lcd_effect_data(mfd, &lcd_data, &data);
+	rc = copy_to_user(argp, &data, sizeof(data));
+	if (rc) {
+		pr_err("%s:copy_to_user failed", __func__);
+		return rc;
+	}
+
+	return ret;
+}
+
 static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 			 unsigned long arg)
 {
@@ -2838,6 +3124,9 @@ static int mdss_fb_ioctl(struct fb_info *info, unsigned int cmd,
 		ret = mdss_fb_display_commit(info, argp);
 		break;
 
+	case MSMFB_PANEL_EFFECT:
+		ret = mdss_fb_panel_effect(mfd, argp);
+		break;
 	case MSMFB_LPM_ENABLE:
 		ret = copy_from_user(&dsi_mode, argp, sizeof(dsi_mode));
 		if (ret) {

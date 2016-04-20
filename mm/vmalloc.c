@@ -280,6 +280,9 @@ static unsigned long vmap_area_pcpu_hole;
 #define VMALLOC_TO_BIT(addr)	((addr - PAGE_OFFSET) >> PAGE_SHIFT)
 #define BIT_TO_VMALLOC(i)	(PAGE_OFFSET + i * PAGE_SIZE)
 
+unsigned long total_vmalloc_size;
+unsigned long vmalloc_reserved;
+
 DECLARE_BITMAP(possible_areas, VMALLOC_BITMAP_SIZE);
 
 void mark_vmalloc_reserved_area(void *x, unsigned long size)
@@ -287,6 +290,7 @@ void mark_vmalloc_reserved_area(void *x, unsigned long size)
 	unsigned long addr = (unsigned long)x;
 
 	bitmap_set(possible_areas, VMALLOC_TO_BIT(addr), size >> PAGE_SHIFT);
+	vmalloc_reserved += size;
 }
 
 int is_vmalloc_addr(const void *x)
@@ -301,6 +305,12 @@ int is_vmalloc_addr(const void *x)
 
 	return 1;
 }
+
+static void calc_total_vmalloc_size(void)
+{
+	total_vmalloc_size = VMALLOC_END - POSSIBLE_VMALLOC_START -
+		vmalloc_reserved;
+}
 #else
 int is_vmalloc_addr(const void *x)
 {
@@ -308,6 +318,8 @@ int is_vmalloc_addr(const void *x)
 
 	return addr >= VMALLOC_START && addr < VMALLOC_END;
 }
+
+static void calc_total_vmalloc_size(void) { }
 #endif
 EXPORT_SYMBOL(is_vmalloc_addr);
 
@@ -1259,6 +1271,7 @@ void __init vmalloc_init(void)
 
 	vmap_area_pcpu_hole = VMALLOC_END;
 
+	calc_total_vmalloc_size();
 	vmap_initialized = true;
 }
 
@@ -2731,5 +2744,49 @@ static int __init proc_vmalloc_init(void)
 	return 0;
 }
 module_init(proc_vmalloc_init);
+
+void get_vmalloc_info(struct vmalloc_info *vmi)
+{
+	struct vm_struct *vma;
+	unsigned long free_area_size;
+	unsigned long prev_end;
+
+	vmi->used = 0;
+
+	if (!vmlist) {
+		vmi->largest_chunk = VMALLOC_TOTAL;
+	} else {
+		vmi->largest_chunk = 0;
+
+		prev_end = VMALLOC_START;
+
+		read_lock(&vmlist_lock);
+
+		for (vma = vmlist; vma; vma = vma->next) {
+			unsigned long addr = (unsigned long) vma->addr;
+
+			/*
+			 * Some archs keep another range for modules in vmlist
+			 */
+			if (addr < VMALLOC_START)
+				continue;
+			if (addr >= VMALLOC_END)
+				break;
+
+			vmi->used += vma->size;
+
+			free_area_size = addr - prev_end;
+			if (vmi->largest_chunk < free_area_size)
+				vmi->largest_chunk = free_area_size;
+
+			prev_end = vma->size + addr;
+		}
+
+		if (VMALLOC_END - prev_end > vmi->largest_chunk)
+			vmi->largest_chunk = VMALLOC_END - prev_end;
+
+		read_unlock(&vmlist_lock);
+	}
+}
 #endif
 

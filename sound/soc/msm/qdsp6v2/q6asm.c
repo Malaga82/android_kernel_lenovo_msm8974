@@ -63,6 +63,15 @@ struct asm_buffer_node {
 	uint32_t  buf_addr_lsw;
 	uint32_t  mmap_hdl;
 };
+#define AUDPROC_MODULE_ID_RESAMPLER 0x00010719
+#define AUDPROC_PARAM_ID_ENABLE_HIGH_THD_RESAMPLER 0x0001071A
+struct asm_high_thd_resamper {
+    struct apr_hdr hdr;
+    struct asm_stream_cmd_set_pp_params_v2 param;
+    struct asm_stream_param_data_v2 data;
+    uint32_t enable_flag;
+} __packed;
+
 static int32_t q6asm_srvc_callback(struct apr_client_data *data, void *priv);
 static int32_t q6asm_callback(struct apr_client_data *data, void *priv);
 static void q6asm_add_hdr(struct audio_client *ac, struct apr_hdr *hdr,
@@ -3548,6 +3557,63 @@ int q6asm_set_mute(struct audio_client *ac, int muteflag)
 fail_cmd:
 	return rc;
 }
+
+int q6asm_set_High_Resampler(struct audio_client *ac, bool HR_Flag)
+{
+	int sz = 0;
+	int rc  = 0;
+	struct asm_high_thd_resamper src_test;
+
+	if (!ac || ac->apr == NULL) {
+		pr_err("%s: APR handle NULL\n", __func__);
+		rc = -EINVAL;
+		goto fail_cmd;
+	}
+
+	printk("func = %s\n",__func__);
+	sz = sizeof(struct asm_high_thd_resamper);
+	q6asm_add_hdr_async(ac, &src_test.hdr, sz, TRUE);
+	atomic_set(&ac->cmd_state, 1);
+	src_test.hdr.opcode = ASM_STREAM_CMD_SET_PP_PARAMS_V2;
+	src_test.param.data_payload_addr_lsw = 0;
+	src_test.param.data_payload_addr_msw = 0;
+	src_test.param.mem_map_handle = 0;
+	src_test.param.data_payload_size = sizeof(src_test) -
+	    sizeof(src_test.hdr) - sizeof(src_test.param);
+	src_test.data.module_id = 0x00010719;//#define AUDPROC_MODULE_ID_RESAMPLER 0x00010719
+	src_test.data.param_id = 0x0001071A; //#define AUDPROC_PARAM_ID_ENABLE_HIGH_THD_RESAMPLER 0x0001071A
+	src_test.data.param_size = 4;
+	    src_test.data.reserved = 0;
+	src_test.enable_flag = HR_Flag;
+
+	rc = apr_send_pkt(ac->apr, (uint32_t *) &src_test);
+	if (rc < 0) {
+	    pr_err("%s: set-params send failed paramid[0x%x]\n", __func__,
+		    src_test.data.param_id);
+	    rc = -EINVAL;
+	    goto fail_cmd;
+	}
+
+	rc = wait_event_timeout(ac->cmd_wait,
+		(atomic_read(&ac->cmd_state) <= 0), 5*HZ);
+	if (!rc) {
+	    pr_err("%s: timeout, set-params paramid[0x%x]\n", __func__,
+		    src_test.data.param_id);
+	    rc = -EINVAL;
+	    goto fail_cmd;
+	}
+	if (atomic_read(&ac->cmd_state) < 0) {
+	    pr_err("%s: DSP returned error[%d] set-params paramid[0x%x]\n",
+		    __func__, atomic_read(&ac->cmd_state),
+		    src_test.data.param_id);
+	    rc = -EINVAL;
+	    goto fail_cmd;
+	}
+	rc = 0;
+fail_cmd:
+	return rc;
+}
+
 
 int q6asm_set_volume(struct audio_client *ac, int volume)
 {

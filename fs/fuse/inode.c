@@ -20,6 +20,10 @@
 #include <linux/random.h>
 #include <linux/sched.h>
 #include <linux/exportfs.h>
+#include <linux/fs.h>
+#include <linux/genhd.h>
+#include <linux/dcache.h>
+#include "../low_storage.h"
 
 MODULE_AUTHOR("Miklos Szeredi <miklos@szeredi.hu>");
 MODULE_DESCRIPTION("Filesystem in Userspace");
@@ -362,6 +366,9 @@ static void convert_fuse_statfs(struct kstatfs *stbuf, struct fuse_kstatfs *attr
 	/* fsid is left zero */
 }
 
+dev_t fuse_data_dev=0;
+int  devnum=0;
+
 static int fuse_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct super_block *sb = dentry->d_sb;
@@ -390,7 +397,25 @@ static int fuse_statfs(struct dentry *dentry, struct kstatfs *buf)
 	fuse_request_send(fc, req);
 	err = req->out.h.error;
 	if (!err)
+	{
 		convert_fuse_statfs(buf, &outarg.st);
+#ifdef  LIMIT_SDCARD_SIZE
+		if((sb->s_dev==fuse_data_dev)&&(outarg.st.bsize!=0)) //internal sdcard
+		{
+			buf->f_blocks  -= (u32)data_free_size_th/outarg.st.bsize;
+			if(buf->f_bfree < ((u32)data_free_size_th/outarg.st.bsize)){
+				buf->f_bfree = 0;
+			}else{
+				buf->f_bfree	 -= (u32)data_free_size_th/outarg.st.bsize;
+			}
+			if(buf->f_bavail < ((u32)data_free_size_th/outarg.st.bsize)){
+				buf->f_bavail = 0;
+			}else{
+				buf->f_bavail	-= (u32)data_free_size_th/outarg.st.bsize;
+			}
+		}
+#endif
+	}
 	fuse_put_request(fc, req);
 	return err;
 }
@@ -966,6 +991,12 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	fuse_conn_init(fc);
 
 	fc->dev = sb->s_dev;
+
+	if(devnum==0)
+	{
+		fuse_data_dev = sb->s_dev;
+		devnum=1;
+	}
 	fc->sb = sb;
 	err = fuse_bdi_init(fc, sb);
 	if (err)

@@ -375,6 +375,9 @@ struct wcd9xxx_mbhc {
 #endif
 
 	struct mutex mbhc_lock;
+    int old_jack_type;
+    bool headset_insert;
+    int lenovo_hsdet_pullup;
 };
 
 #define WCD9XXX_MBHC_CAL_SIZE(buttons, rload) ( \
