@@ -31,11 +31,6 @@
 #include "clock-krait.h"
 #include "clock.h"
 
-#ifdef CONFIG_PVS_LEVEL_INTERFACE
-int pvs_level = -1;
-module_param(pvs_level, int, S_IRUGO); 
-#endif
-
 /* Clock inputs coming into Krait subsystem */
 DEFINE_FIXED_DIV_CLK(hfpll_src_clk, 1, NULL);
 DEFINE_FIXED_DIV_CLK(acpu_aux_clk, 2, NULL);
@@ -418,6 +413,18 @@ static struct clk *cpu_clk[] = {
 	&krait3_clk.c,
 };
 
+//yangjq, 20140113, Add to show AP's clock rate in /sys/private/pm_status, START
+unsigned long acpu_clk_get_rate(int cpu)
+{
+	unsigned long cur_rate;
+
+	struct clk *c = cpu_clk[cpu];
+	cur_rate = clk_get_rate(c);
+
+	return cur_rate;
+}
+//yangjq, 20140113, Add to show AP's clock rate in /sys/private/pm_status, END
+
 static void get_krait_bin_format_b(struct platform_device *pdev,
 					int *speed, int *pvs, int *pvs_ver)
 {
@@ -475,10 +482,6 @@ static void get_krait_bin_format_b(struct platform_device *pdev,
 		dev_warn(&pdev->dev, "PVS bin not set. Defaulting to 0!\n");
 		*pvs = 0;
 	}
-
-#ifdef CONFIG_PVS_LEVEL_INTERFACE
-	pvs_level = *pvs;
-#endif
 
 	dev_info(&pdev->dev, "PVS version: %d\n", *pvs_ver);
 

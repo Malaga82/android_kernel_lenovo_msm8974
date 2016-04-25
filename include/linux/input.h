@@ -432,15 +432,10 @@ struct input_keymap_entry {
 #define KEY_SEARCH		217
 #define KEY_CONNECT		218
 #define KEY_FINANCE		219	/* AL Checkbook/Finance */
-#if 0  // TODO
-#define KEY_SPORT		220
-#define KEY_SHOP		221
-#else
-#define KEY_SPORT              250
-#define KEY_SHOP               251
-#define KEY_SPORT_B            252
-#define KEY_SHOP_B             253
-#endif
+#define KEY_SPORT		250
+#define KEY_SHOP		251
+#define KEY_SPORT_B		252
+#define KEY_SHOP_B		253
 #define KEY_ALTERASE		222
 #define KEY_CANCEL		223	/* AC Cancel */
 #define KEY_BRIGHTNESSDOWN	224
@@ -481,7 +476,6 @@ struct input_keymap_entry {
 #define KEY_NAVI_RIGHT  249
 #define KEY_NAVI_LEFT   254
 #define KEY_FNGR_DETECT 0x2e8
-#define KEY_NAVI_LONG   183
 
 /* Code 255 is reserved for special needs of AT keyboard driver */
 
@@ -821,9 +815,9 @@ struct input_keymap_entry {
 #define ABS_TOOL_WIDTH		0x1c
 
 #define ABS_VOLUME		0x20
-#define ABS_R                   0x21
-#define ABS_G                   0x22
-#define ABS_B                   0x23
+#define ABS_R           0x21
+#define ABS_G           0x22
+#define ABS_B           0x23
 
 #define ABS_MISC		0x28
 
@@ -1197,18 +1191,6 @@ struct ff_effect {
 #include <linux/mod_devicetable.h>
 
 /**
- * struct input_value - input value representation
- * @type: type of value (EV_KEY, EV_ABS, etc)
- * @code: the value code
- * @value: the value
- */
-struct input_value {
-	__u16 type;
-	__u16 code;
-	__s32 value;
-};
-
-/**
  * struct input_dev - represents an input device
  * @name: name of the device
  * @phys: physical path to the device in the system hierarchy
@@ -1284,6 +1266,7 @@ struct input_value {
  *	last user closes the device
  * @going_away: marks devices that are in a middle of unregistering and
  *	causes input_open_device*() fail with -ENODEV.
+ * @sync: set to %true when there were no new events since last EV_SYN
  * @dev: driver model's view of this device
  * @h_list: list of input handles associated with the device. When
  *	accessing the list dev->mutex must be held
@@ -1351,14 +1334,12 @@ struct input_dev {
 	unsigned int users;
 	bool going_away;
 
+	bool sync;
+
 	struct device dev;
 
 	struct list_head	h_list;
 	struct list_head	node;
-
-	unsigned int num_vals;
-	unsigned int max_vals;
-	struct input_value *vals;
 };
 #define to_input_dev(d) container_of(d, struct input_dev, dev)
 
@@ -1419,9 +1400,6 @@ struct input_handle;
  * @event: event handler. This method is being called by input core with
  *	interrupts disabled and dev->event_lock spinlock held and so
  *	it may not sleep
- * @events: event sequence handler. This method is being called by
- *	input core with interrupts disabled and dev->event_lock
- *	spinlock held and so it may not sleep
  * @filter: similar to @event; separates normal event handlers from
  *	"filters".
  * @match: called after comparing device's id with handler's id_table
@@ -1458,8 +1436,6 @@ struct input_handler {
 	void *private;
 
 	void (*event)(struct input_handle *handle, unsigned int type, unsigned int code, int value);
-	void (*events)(struct input_handle *handle,
-		       const struct input_value *vals, unsigned int count);
 	bool (*filter)(struct input_handle *handle, unsigned int type, unsigned int code, int value);
 	bool (*match)(struct input_handler *handler, struct input_dev *dev);
 	int (*connect)(struct input_handler *handler, struct input_dev *dev, const struct input_device_id *id);
@@ -1698,19 +1674,5 @@ int input_ff_erase(struct input_dev *dev, int effect_id, struct file *file);
 int input_ff_create_memless(struct input_dev *dev, void *data,
 		int (*play_effect)(struct input_dev *, void *, struct ff_effect *));
 
-
-#ifdef CONFIG_INPUT_MEDIATOR
-struct input_mediator_handler {
-	void (*event)(struct input_handle *handle, unsigned int type,
-		unsigned int code, int value);
-
-	struct list_head node;
-};
-
-void input_register_mediator_primary(struct input_mediator_handler* handler);
-void input_unregister_mediator_primary(struct input_mediator_handler* handler);
-void input_register_mediator_secondary(struct input_mediator_handler* handler);
-void input_unregister_mediator_secondary(struct input_mediator_handler* handler);
-#endif
 #endif
 #endif
