@@ -104,7 +104,6 @@ int pm_autosleep_set_state(suspend_state_t state)
 	if (state > PM_SUSPEND_ON) {
 		pm_wakep_autosleep_enabled(true);
 		queue_up_suspend_work();
-
 	} else {
 		pm_wakep_autosleep_enabled(false);
 	}

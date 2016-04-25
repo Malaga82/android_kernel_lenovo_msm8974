@@ -33,7 +33,6 @@
 #include <linux/ctype.h>
 #include <linux/slab.h>
 #include <linux/of.h>
-#include <linux/wakelock.h>
 #include <sound/ac97_codec.h>
 #include <sound/core.h>
 #include <sound/jack.h>
@@ -59,8 +58,6 @@ static DEFINE_MUTEX(client_mutex);
 static LIST_HEAD(dai_list);
 static LIST_HEAD(platform_list);
 static LIST_HEAD(codec_list);
-
-static struct wake_lock resume_thread_wakelock;
 
 int soc_new_pcm(struct snd_soc_pcm_runtime *rtd, int num);
 int soc_dpcm_debugfs_add(struct snd_soc_pcm_runtime *rtd);
@@ -800,7 +797,6 @@ static void soc_resume_deferred(struct work_struct *work)
 
 	/* userspace can access us now we are back as we were before */
 	snd_power_change_state(card->snd_card, SNDRV_CTL_POWER_D0);
-    wake_unlock(&resume_thread_wakelock);
 }
 
 /* powers up audio subsystem after a suspend */
@@ -829,7 +825,6 @@ int snd_soc_resume(struct device *dev)
 		soc_resume_deferred(&card->deferred_resume_work);
 	} else {
 		dev_dbg(dev, "Scheduling resume work\n");
-        wake_lock(&resume_thread_wakelock);
 		if (!schedule_work(&card->deferred_resume_work))
 			dev_err(dev, "resume work item may be lost\n");
 	}
@@ -1645,7 +1640,6 @@ static int snd_soc_instantiate_card(struct snd_soc_card *card)
 #ifdef CONFIG_PM_SLEEP
 	/* deferred resume work */
 	INIT_WORK(&card->deferred_resume_work, soc_resume_deferred);
-    wake_lock_init(&resume_thread_wakelock, WAKE_LOCK_SUSPEND, "audio_resume_thread_wakelock");
 #endif
 
 	if (card->dapm_widgets)
