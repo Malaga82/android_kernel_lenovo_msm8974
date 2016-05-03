@@ -531,8 +531,7 @@ static void wcd9xxx_chargepump_request(struct snd_soc_codec *codec, bool on)
 					__func__);
 			}
 			cp_count = 0;
-//			WARN_ON(1);
-            printk(KERN_INFO "enter %s, enable and disable not matched!!!\n", __func__);
+			WARN_ON(1);
 		}
 
 		if (cp_count == 0) {
@@ -576,12 +575,10 @@ void wcd9xxx_clsh_imped_config(struct snd_soc_codec *codec,
 	int i  = 0;
 	int index = 0;
 	index = get_impedance_index(imped);
-	if (index > ARRAY_SIZE(imped_index)) {
-		printk(KERN_ERR "%s, invalid imped = %d\n", __func__, imped);
+	if (index >= ARRAY_SIZE(imped_index)) {
+		pr_err("%s, invalid imped = %d\n", __func__, imped);
 		return;
-	} else
-        printk(KERN_INFO "%s, enter and impedance %d, index %d...\n",
-                __func__, imped, index);
+	}
 	for (i = 0; i < MAX_IMPED_PARAMS; i++)
 		snd_soc_write(codec, imped_table[index][i].reg,
 					imped_table[index][i].val);
@@ -957,7 +954,6 @@ static void wcd9xxx_clsh_state_hph_lo(struct snd_soc_codec *codec,
 		if ((clsh_d->state == WCD9XXX_CLSH_STATE_LO) ||
 			(req_state == WCD9XXX_CLSH_STATE_LO)) {
 			wcd9xxx_dynamic_bypass_buck_ctrl_lo(codec, false);
-			wcd9xxx_enable_buck(codec, clsh_d, true);
 			wcd9xxx_set_fclk_get_ncp(codec, clsh_d,
 						NCP_FCLK_LEVEL_8);
 			if (req_state & WCD9XXX_CLSH_STATE_HPH_ST) {
@@ -1301,8 +1297,6 @@ void wcd9xxx_clsh_fsm(struct snd_soc_codec *codec,
 
 	switch (clsh_event) {
 	case WCD9XXX_CLSH_EVENT_PRE_DAC:
-        printk(KERN_INFO "enter %s, line %d, req_state 0x%x, req_type %d---\n",
-                __func__, __LINE__, req_state, req_type);
 		/* PRE_DAC event should be used only for Enable */
 		BUG_ON(req_type != WCD9XXX_CLSH_REQ_ENABLE);
 
@@ -1333,8 +1327,6 @@ void wcd9xxx_clsh_fsm(struct snd_soc_codec *codec,
 
 		break;
 	case WCD9XXX_CLSH_EVENT_POST_PA:
-        printk(KERN_INFO "enter %s, line %d, req_state 0x%x, req_type %d---\n",
-                __func__, __LINE__, req_state, req_type);
 		if (req_type == WCD9XXX_CLSH_REQ_DISABLE) {
 			old_state = cdc_clsh_d->state;
 			new_state = old_state & (~req_state);

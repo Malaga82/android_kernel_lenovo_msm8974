@@ -2167,8 +2167,8 @@
 		compatible = "qcom,msm-watchdog";
 		reg = <0xf9017000 0x1000>;
 		interrupts = <0 3 0>, <0 4 0>;
-		qcom,bark-time = <11000>;
-		qcom,pet-time = <8000>;
+		qcom,bark-time = <21000>;
+		qcom,pet-time = <20000>;
 		qcom,ipi-ping;
 	};
 
@@ -2249,7 +2249,7 @@
 		qcom,memory-reservation-size = <0x280000>; /* 2.5M EBI1 buffer */
 	};
 
-        qcom,qcedev@fd440000 {
+        qcom_cedev: qcom,qcedev@fd440000 {
 		compatible = "qcom,qcedev";
 		reg = <0xfd440000 0x20000>,
 		      <0xfd444000 0x1b000>;
@@ -2266,7 +2266,7 @@
 				<56 512 3936000 393600>;
 	};
 
-        qcom,qcrypto@fd440000 {
+        qcom_crypto: qcrypto@fd440000 {
 		compatible = "qcom,qcrypto";
 		reg = <0xfd440000 0x20000>,
 		      <0xfd444000 0x1b000>;
@@ -2287,7 +2287,7 @@
 				<56 512 3936000 393600>;
 	};
 
-        qcom,qcrypto1@fd440000 {
+        qcom_crypto1: qcrypto1@fd440000 {
 		compatible = "qcom,qcrypto";
 		reg = <0xfd440000 0x20000>,
 		      <0xfd444000 0x1b000>;

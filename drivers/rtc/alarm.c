@@ -71,15 +71,8 @@ static struct platform_device *alarm_platform_dev;
 struct alarm_queue alarms[ANDROID_ALARM_TYPE_COUNT];
 static bool suspended;
 static long power_on_alarm;
-#ifndef LENOVO_POWEROFF_ALARM
-#define LENOVO_POWEROFF_ALARM
-#endif
-#ifdef LENOVO_POWEROFF_ALARM
-static void alarm_shutdown(struct platform_device *dev);
-int alarm_set_deviceup(struct rtc_device *rtc, struct rtc_wkalrm *alarm);
-#else
-#endif
-//static int set_alarm_time_to_rtc(const long);
+
+static int set_alarm_time_to_rtc(const long);
 
 void set_power_on_alarm(long secs, bool enable)
 {
@@ -96,7 +89,7 @@ void set_power_on_alarm(long secs, bool enable)
 			power_on_alarm = 0;
 	}
 
-	//set_alarm_time_to_rtc(power_on_alarm);
+	set_alarm_time_to_rtc(power_on_alarm);
 	mutex_unlock(&power_on_alarm_mutex);
 }
 
@@ -195,6 +188,7 @@ void alarm_init(struct alarm *alarm,
 
 	pr_alarm(FLOW, "created alarm, type %d, func %pF\n", type, function);
 }
+
 
 /**
  * alarm_start_range - (re)start an alarm
@@ -425,47 +419,6 @@ static void alarm_triggered_func(void *p)
 	wake_lock_timeout(&alarm_rtc_wake_lock, 1 * HZ);
 }
 
-
-#ifdef LENOVO_POWEROFF_ALARM
-void alarm_set_real_rtc(int alarm_type,  struct timespec new_alarm_time)
-{
-        struct rtc_wkalrm   rtc_alarm;
-        struct rtc_time     rtc_current_rtc_time;
-        unsigned long       rtc_current_time;
-        unsigned long       rtc_alarm_time;
-        struct timespec     rtc_delta;
-        struct timespec     wall_time;
-
-        printk("alarm_set_real_rtc alarm: %d, %ld.%ld\n", alarm_type,
-                new_alarm_time.tv_sec, new_alarm_time.tv_nsec);
-
-        if (new_alarm_time.tv_sec == 0 && new_alarm_time.tv_nsec == 0)
-        {
-                 rtc_alarm_time = 0;
-                 rtc_time_to_tm(rtc_alarm_time, &rtc_alarm.time);
-               // rtc_read_time(alarm_rtc_dev, &rtc_alarm.time);
-                rtc_alarm.enabled = 0;
-                alarm_set_deviceup(alarm_rtc_dev, &rtc_alarm);
-        }
-        else
-        {
-                rtc_read_time(alarm_rtc_dev, &rtc_current_rtc_time);
-                getnstimeofday(&wall_time);
-                rtc_tm_to_time(&rtc_current_rtc_time, &rtc_current_time);
-                set_normalized_timespec(&rtc_delta,
-                                        wall_time.tv_sec - rtc_current_time,
-                                        wall_time.tv_nsec);
-
-                rtc_alarm_time = timespec_sub(new_alarm_time, rtc_delta).tv_sec;
-
-                rtc_time_to_tm(rtc_alarm_time, &rtc_alarm.time);
-                rtc_alarm.enabled = 1;
-		alarm_set_deviceup(alarm_rtc_dev, &rtc_alarm);
-        }
-}
-#endif
-
-
 static int alarm_suspend(struct platform_device *pdev, pm_message_t state)
 {
 	int                 err = 0;
@@ -570,102 +523,9 @@ static int alarm_resume(struct platform_device *pdev)
 									false);
 	spin_unlock_irqrestore(&alarm_slock, flags);
 
-	//set_alarm_time_to_rtc(power_on_alarm);
+	set_alarm_time_to_rtc(power_on_alarm);
 	return 0;
 }
-#ifdef LENOVO_POWEROFF_ALARM
-extern int qpnp_acorusb_pw;
-static void alarm_shutdown(struct platform_device *dev)
-{
-	int rc = 0;
-	unsigned long       flags;
-	struct rtc_wkalrm   rtc_alarm;
-	struct rtc_time     rtc_current_rtc_time;
-	unsigned long       rtc_current_time;
-	unsigned long       rtc_alarm_time;
-	struct timespec     rtc_delta;
-	struct timespec     wall_time;
-	struct alarm_queue *wakeup_queue = NULL;
-	struct alarm_queue *tmp_queue = NULL;
-   
-	spin_lock_irqsave(&alarm_slock, flags);
-	//if (!power_on_alarm)
-	//	goto disable_alarm;
-
-	hrtimer_cancel(&alarms[ANDROID_ALARM_RTC_WAKEUP].timer);
-	hrtimer_cancel(&alarms[
-			ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP].timer);
-	hrtimer_cancel(&alarms[ANDROID_ALARM_RTC_POWEROFF_WAKEUP].timer);
-
-	tmp_queue = &alarms[ANDROID_ALARM_RTC_POWEROFF_WAKEUP];
-	if (tmp_queue->first && (!wakeup_queue ||
-				hrtimer_get_expires(&tmp_queue->timer).tv64 <
-				hrtimer_get_expires(&wakeup_queue->timer).tv64))
-		wakeup_queue = tmp_queue;
-	if (wakeup_queue)
-    {
-		rtc_read_time(alarm_rtc_dev, &rtc_current_rtc_time);
-		getnstimeofday(&wall_time);
-		rtc_tm_to_time(&rtc_current_rtc_time, &rtc_current_time);
-		set_normalized_timespec(&rtc_delta,
-					wall_time.tv_sec - rtc_current_time,
-					wall_time.tv_nsec);
-
-		rtc_alarm_time = timespec_sub(ktime_to_timespec(
-			hrtimer_get_expires(&wakeup_queue->timer)),
-			rtc_delta).tv_sec;
-	if (rtc_alarm_time <= rtc_current_time)
-		goto disable_alarm;
-
-		rtc_time_to_tm(rtc_alarm_time, &rtc_alarm.time);
-		rtc_alarm.enabled = 1;
-	        rc = rtc_set_alarm(alarm_rtc_dev, &rtc_alarm);
-	if (rc)
-		printk("alarm_shutdown Unable to set power-on alarm\n");
-	else
-		printk("alarm_shutdown Power-on alarm set to %lu\n",
-				rtc_alarm_time);
-	}else if(1 == qpnp_acorusb_pw)
-    {
-        rtc_read_alarm(alarm_rtc_dev,&rtc_alarm);
-        rtc_read_time(alarm_rtc_dev, &rtc_current_rtc_time);
-        rtc_tm_to_time(&rtc_current_rtc_time, &rtc_current_time);
-        rtc_tm_to_time(&rtc_alarm.time, &rtc_alarm_time);
-        if (rtc_alarm_time > rtc_current_time)
-        {
-            rtc_alarm.enabled = 1;
-            alarm_set_deviceup(alarm_rtc_dev,&rtc_alarm);
-        }else
-        {
-            printk("alarm_shutdown qpnp_acorusb_pw=%d goto disable_alarm \n",qpnp_acorusb_pw);
-            goto disable_alarm;
-        }
-    }
-    else
-    {
-        goto disable_alarm;
-    }
-	spin_unlock_irqrestore(&alarm_slock, flags);
-	return;
-
-disable_alarm:
-    printk("alarm_shutdown disable_alarm \r\n");
-    rtc_alarm_time = 0;
-    rtc_time_to_tm(rtc_alarm_time, &rtc_alarm.time);
-    rtc_alarm.enabled = 0;
-    rc = alarm_set_deviceup(alarm_rtc_dev, &rtc_alarm);
-
-    rtc_alarm_irq_enable(alarm_rtc_dev, 0);
-	if (rc){
-		printk("alarm_shutdown disable_alarm fail to set power-on alarm rc=%d \n",rc);
-    }else{
-		printk("alarm_shutdown disable_alarm ok Power-on alarm set to %lu\n",
-				rtc_alarm_time);
-    }
-    spin_unlock_irqrestore(&alarm_slock, flags);
-    return;
-}
-#else
 
 static int set_alarm_time_to_rtc(const long power_on_time)
 {
@@ -713,7 +573,7 @@ disable_alarm:
 	rtc_alarm_irq_enable(alarm_rtc_dev, 0);
 	return rc;
 }
-#endif
+
 static struct rtc_task alarm_rtc_task = {
 	.func = alarm_triggered_func
 };
@@ -773,9 +633,6 @@ static struct class_interface rtc_alarm_interface = {
 static struct platform_driver alarm_driver = {
 	.suspend = alarm_suspend,
 	.resume = alarm_resume,
-#ifdef LENOVO_POWEROFF_ALARM
-	.shutdown = alarm_shutdown,
-#endif
 	.driver = {
 		.name = "alarm"
 	}

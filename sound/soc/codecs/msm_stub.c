@@ -17,44 +17,6 @@
 #include <sound/pcm.h>
 #include <sound/soc.h>
 
-static int msm_stub_dai_startup(struct snd_pcm_substream *substream,
-        struct snd_soc_dai *dai)
-{
-    return 0;
-}
-
-static int msm_stub_dai_hw_params(struct snd_pcm_substream *substream,
-        struct snd_pcm_hw_params *params,
-        struct snd_soc_dai *dai)
-{
-    return 0;
-}
-
-static void msm_stub_dai_shutdown(struct snd_pcm_substream *substream,
-        struct snd_soc_dai *dai)
-{
-    return;
-}
-
-static int msm_stub_dai_sysclk(struct snd_soc_dai *dai,
-        int clk_id, unsigned int freq, int dir)
-{
-    return 0;
-}
-
-static int msm_stub_dai_fmt(struct snd_soc_dai *dai, unsigned int fmt)
-{
-    return 0;
-}
-
-static struct snd_soc_dai_ops msm_stub_dai_ops = {
-    .startup = msm_stub_dai_startup,
-    .hw_params = msm_stub_dai_hw_params,
-    .shutdown = msm_stub_dai_shutdown,
-    .set_sysclk = msm_stub_dai_sysclk,
-    .set_fmt = msm_stub_dai_fmt,
-};
-
 /* A dummy driver useful only to advertise hardware parameters */
 static struct snd_soc_dai_driver msm_stub_dais[] = {
 	{
@@ -66,7 +28,6 @@ static struct snd_soc_dai_driver msm_stub_dais[] = {
 			.rates = SNDRV_PCM_RATE_8000_48000,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE,
 		},
-        .ops = &msm_stub_dai_ops,
 	},
 	{
 		.name = "msm-stub-tx",
@@ -78,7 +39,6 @@ static struct snd_soc_dai_driver msm_stub_dais[] = {
 			.formats = (SNDRV_PCM_FMTBIT_S16_LE |
 				    SNDRV_PCM_FMTBIT_S24_LE),
 		},
-        .ops = &msm_stub_dai_ops,
 	},
 };
 
