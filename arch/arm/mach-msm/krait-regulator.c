@@ -826,8 +826,11 @@ static int configure_ldo_or_hs_all(struct krait_power_vreg *from, int vmax)
 	}
 	return rc;
 }
-
+#ifndef CONFIG_VENDOR_EDIT
 #define SLEW_RATE 2395
+#else
+#define SLEW_RATE 1500 /* qcom patch, CASE ID: 01694672, Zhilong.Zhang@OnlineRd.Driver, 2014/09/19, Modify for solve the problem of Kernel NULL pointer */
+#endif
 static int krait_voltage_increase(struct krait_power_vreg *from,
 							int vmax)
 {
@@ -1400,7 +1403,7 @@ static int __devexit krait_power_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct of_device_id krait_power_match_table[] = {
+static struct of_device_id krait_power_match_table[] __initdata = {
 	{ .compatible = "qcom,krait-regulator", },
 	{}
 };
@@ -1415,7 +1418,7 @@ static struct platform_driver krait_power_driver = {
 	},
 };
 
-static struct of_device_id krait_pdn_match_table[] = {
+static struct of_device_id krait_pdn_match_table[] __initdata = {
 	{ .compatible = "qcom,krait-pdn", },
 	{}
 };

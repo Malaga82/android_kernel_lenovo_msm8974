@@ -287,7 +287,6 @@ config ARCH_MSM8974
 	select ARCH_WANT_KMAP_ATOMIC_FLUSH
 	select KRAIT_REGULATOR
 	select ENABLE_VMALLOC_SAVINGS
-	select HAS_MACH_MEMUTILS
 
 config ARCH_APQ8084
 	bool "APQ8084"
@@ -2437,6 +2436,12 @@ config MSM_MEMORY_DUMP
 		of deadlocks or cpu hangs these dump regions are captured to
 		give a snapshot of the system at the time of the crash.
 
+config VENDOR_EDIT_OP_LASTKMSG
+	bool "Enable last_kmsg"
+	default n
+	help
+                This most time can help us to check crash issue without parse dump.
+
 config MSM_DLOAD_MODE
 	bool "Enable download mode on crashes"
 	default n
@@ -3037,6 +3042,33 @@ config WALL_CLK_SYSFS
 	 Support the wallclk directory in sysfs filesystem to enable the
 	 wall clock simulation and read the current SFN.
 
+#ifdef VENDOR_EDIT
+#Wangjc@OnlineRd.Driver, 2013/10/23, Add for kernel OPPO_DEVICE_IFNO macro
+config OPPO_DEVICE_IFNO
+	bool "config oppo device info"
+	default y
+	help
+	  This is the oppo device info show function, open it will enable the function.
+
+#jiangyg@OnlineRd.PM, 2013/10/18, Add for device selection
+config OEM_DEBUG_ASSERT
+	bool "CONFIG_OEM_DEBUG_ASSERT"
+	help
+	  This is for debug assert
+
+#endif /* VENDOR_EDIT */
+
+
+#ifdef VENDOR_EDIT
+#yangrujin@bsp, 2015/5/21, Add for project info
+config OEM_PROJECT_INFO
+	bool "CONFIG_OEM_PROJECT_INFO"
+	default y
+	help
+	  This is for project info
+
+#endif /* VENDOR_EDIT */
+
 config KRAIT_REGULATOR
 	bool "Support Kraits powered via ganged regulators in the pmic"
 	help
@@ -3044,18 +3076,6 @@ config KRAIT_REGULATOR
 	 line from the PMIC. This supply line is powered by multiple
 	 regulators running in ganged mode inside the PMIC. Enable
 	 this option to support such configurations.
-
-config HAS_MACH_MEMUTILS
-	default n
-	bool "Motorola MSM memcpy enhancements"
-	help
-	Faster memcpy performance for Krait
-
-config MSM_SECBOOT
-	default n
-	bool "MSM Secboot verification driver"
-	help
-	Driver to expose secureboot status
 endif
 
 config KERNEL_TEXT_MPU_PROT
