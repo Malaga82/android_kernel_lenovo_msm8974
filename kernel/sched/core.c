@@ -88,6 +88,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/sched.h>
 
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+#include <linux/oneplus.h>
+#endif
 ATOMIC_NOTIFIER_HEAD(migration_notifier_head);
 
 void start_bandwidth_timer(struct hrtimer *period_timer, ktime_t period)
@@ -1290,28 +1294,18 @@ EXPORT_SYMBOL_GPL(kick_process);
  */
 static int select_fallback_rq(int cpu, struct task_struct *p)
 {
-	int nid = cpu_to_node(cpu);
-	const struct cpumask *nodemask = NULL;
+	const struct cpumask *nodemask = cpumask_of_node(cpu_to_node(cpu));
 	enum { cpuset, possible, fail } state = cpuset;
 	int dest_cpu;
 
-	/*
-	 * If the node that the cpu is on has been offlined, cpu_to_node()
-	 * will return -1. There is no cpu on the node, and we should
-	 * select the cpu on the other node.
-	 */
-	if (nid != -1) {
-		nodemask = cpumask_of_node(nid);
-
-		/* Look for allowed, online CPU in same node. */
-		for_each_cpu(dest_cpu, nodemask) {
-			if (!cpu_online(dest_cpu))
-				continue;
-			if (!cpu_active(dest_cpu))
-				continue;
-			if (cpumask_test_cpu(dest_cpu, tsk_cpus_allowed(p)))
-				return dest_cpu;
-		}
+	/* Look for allowed, online CPU in same node. */
+	for_each_cpu(dest_cpu, nodemask) {
+		if (!cpu_online(dest_cpu))
+			continue;
+		if (!cpu_active(dest_cpu))
+			continue;
+		if (cpumask_test_cpu(dest_cpu, tsk_cpus_allowed(p)))
+			return dest_cpu;
 	}
 
 	for (;;) {
@@ -1681,9 +1675,23 @@ stat:
 out:
 	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
 
-	if (notify)
-		atomic_notifier_call_chain(&migration_notifier_head,
-					   cpu, (void *)src_cpu);
+#ifdef VENDOR_EDIT
+	if (notify)	{
+//add by huruihuan for tradeoff performence and power 
+        if(boost_game_only) {
+            if(p->game_flag == PROCESS_RENDER_THREAD)
+                atomic_notifier_call_chain(&migration_notifier_head,
+                            cpu, (void *)src_cpu);
+        }
+        else
+            atomic_notifier_call_chain(&migration_notifier_head,
+                        cpu, (void *)src_cpu);
+    }
+#else
+    if (notify)
+        atomic_notifier_call_chain(&migration_notifier_head,
+                        cpu, (void *)src_cpu);
+#endif
 	return success;
 }
 
@@ -5151,9 +5159,23 @@ done:
 fail:
 	double_rq_unlock(rq_src, rq_dest);
 	raw_spin_unlock(&p->pi_lock);
+#ifdef VENDOR_EDIT
+	if (moved && task_notify_on_migrate(p)) {
+//add by huruihuan for tradeoff performence and power 
+        if(boost_game_only) {
+            if(p->game_flag == PROCESS_RENDER_THREAD)
+                atomic_notifier_call_chain(&migration_notifier_head,
+                                dest_cpu, (void *)src_cpu);
+        }
+        else
+            atomic_notifier_call_chain(&migration_notifier_head,
+                            dest_cpu, (void *)src_cpu);
+    }
+#else
 	if (moved && task_notify_on_migrate(p))
 		atomic_notifier_call_chain(&migration_notifier_head,
-					   dest_cpu, (void *)src_cpu);
+						dest_cpu, (void *)src_cpu);
+#endif
 	return ret;
 }
 
@@ -7855,6 +7877,11 @@ static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota)
 	if (period > max_cfs_quota_period)
 		return -EINVAL;
 
+	/*
+	 * Prevent race between setting of cfs_rq->runtime_enabled and
+	 * unthrottle_offline_cfs_rqs().
+	 */
+	get_online_cpus();
 	mutex_lock(&cfs_constraints_mutex);
 	ret = __cfs_schedulable(tg, period, quota);
 	if (ret)
@@ -7871,12 +7898,11 @@ static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota)
 	/* restart the period timer (if active) to handle new period expiry */
 	if (runtime_enabled && cfs_b->timer_active) {
 		/* force a reprogram */
-		cfs_b->timer_active = 0;
-		__start_cfs_bandwidth(cfs_b);
+		__start_cfs_bandwidth(cfs_b, true);
 	}
 	raw_spin_unlock_irq(&cfs_b->lock);
 
-	for_each_possible_cpu(i) {
+	for_each_online_cpu(i) {
 		struct cfs_rq *cfs_rq = tg->cfs_rq[i];
 		struct rq *rq = cfs_rq->rq;
 
@@ -7890,9 +7916,38 @@ static int tg_set_cfs_bandwidth(struct task_group *tg, u64 period, u64 quota)
 	}
 out_unlock:
 	mutex_unlock(&cfs_constraints_mutex);
+	put_online_cpus();
 
 	return ret;
 }
+
+#ifdef VENDOR_EDIT
+int tg_set_cfs_quota_per_task(struct task_group *tg, long cfs_quota_us)
+{
+	struct cfs_bandwidth *cfs_b = &tg->cfs_bandwidth;
+	u64 quota, period;
+
+	period = ktime_to_ns(tg->cfs_bandwidth.period);
+	quota = tg->cfs_bandwidth.quota;
+
+	raw_spin_lock_irq(&cfs_b->lock);
+	if (cfs_quota_us > 0)
+		cfs_b->quota_per_task = (u64)cfs_quota_us * NSEC_PER_USEC;
+	raw_spin_unlock_irq(&cfs_b->lock);
+
+	return tg_set_cfs_bandwidth(tg, period, quota);
+}
+
+long tg_get_cfs_quota_per_task(struct task_group *tg)
+{
+	u64 quota_us;
+
+	quota_us = tg->cfs_bandwidth.quota_per_task;
+	do_div(quota_us, NSEC_PER_USEC);
+
+	return quota_us;
+}
+#endif
 
 int tg_set_cfs_quota(struct task_group *tg, long cfs_quota_us)
 {
@@ -7939,6 +7994,19 @@ long tg_get_cfs_period(struct task_group *tg)
 
 	return cfs_period_us;
 }
+
+#ifdef VENDOR_EDIT
+static s64 cpu_cfs_quota_per_task_read_s64(struct cgroup *cgrp, struct cftype *cft)
+{
+	return tg_get_cfs_quota_per_task(cgroup_tg(cgrp));
+}
+
+static int cpu_cfs_quota_per_task_write_s64(struct cgroup *cgrp, struct cftype *cftype,
+				s64 cfs_quota_us)
+{
+	return tg_set_cfs_quota_per_task(cgroup_tg(cgrp), cfs_quota_us);
+}
+#endif
 
 static s64 cpu_cfs_quota_read_s64(struct cgroup *cgrp, struct cftype *cft)
 {
@@ -8093,6 +8161,13 @@ static struct cftype cpu_files[] = {
 	},
 #endif
 #ifdef CONFIG_CFS_BANDWIDTH
+#ifdef VENDOR_EDIT
+	{
+		.name = "cfs_quota_us_per_task",
+		.read_s64 = cpu_cfs_quota_per_task_read_s64,
+		.write_s64 = cpu_cfs_quota_per_task_write_s64,
+	},
+#endif
 	{
 		.name = "cfs_quota_us",
 		.read_s64 = cpu_cfs_quota_read_s64,

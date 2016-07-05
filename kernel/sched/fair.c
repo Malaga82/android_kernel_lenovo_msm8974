@@ -27,6 +27,10 @@
 #include <linux/profile.h>
 #include <linux/interrupt.h>
 
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+#include <linux/oneplus.h>
+#endif
 #include <trace/events/sched.h>
 
 #include "sched.h"
@@ -1432,6 +1436,26 @@ static inline u64 sched_cfs_bandwidth_slice(void)
 	return (u64)sysctl_sched_cfs_bandwidth_slice * NSEC_PER_USEC;
 }
 
+#ifdef VENDOR_EDIT
+static unsigned int count_currnet_cfs_h_tasks(struct cfs_bandwidth *cfs_b)
+{
+	struct cfs_rq *cfs_rq;
+	unsigned int task_count = 0;
+
+	rcu_read_lock();
+	list_for_each_entry_rcu(cfs_rq, &cfs_b->throttled_cfs_rq,
+				throttled_list) {
+		task_count += cfs_rq->h_nr_running;
+	}
+	list_for_each_entry_rcu(cfs_rq, &cfs_b->unthrottled_cfs_rq,
+				unthrottled_list) {
+		task_count += cfs_rq->h_nr_running;
+	}
+	rcu_read_unlock();
+	return task_count?:1;
+}
+#endif
+
 /*
  * Replenish runtime according to assigned quota and update expiration time.
  * We use sched_clock_cpu directly instead of rq->clock to avoid adding
@@ -1442,12 +1466,22 @@ static inline u64 sched_cfs_bandwidth_slice(void)
 void __refill_cfs_bandwidth_runtime(struct cfs_bandwidth *cfs_b)
 {
 	u64 now;
+#ifdef VENDOR_EDIT
+	unsigned int nr_h_tasks;
+#endif
 
 	if (cfs_b->quota == RUNTIME_INF)
 		return;
 
 	now = sched_clock_cpu(smp_processor_id());
-	cfs_b->runtime = cfs_b->quota;
+#ifdef VENDOR_EDIT
+	nr_h_tasks = count_currnet_cfs_h_tasks(cfs_b);
+	if (cfs_b->quota_per_task != 0 && nr_h_tasks != 0)
+		cfs_b->runtime = min(cfs_b->quota, cfs_b->quota_per_task * nr_h_tasks);
+	else
+#endif
+		cfs_b->runtime = cfs_b->quota;
+
 	cfs_b->runtime_expires = now + ktime_to_ns(cfs_b->period);
 }
 
@@ -1478,7 +1512,7 @@ static int assign_cfs_rq_runtime(struct cfs_rq *cfs_rq)
 		 */
 		if (!cfs_b->timer_active) {
 			__refill_cfs_bandwidth_runtime(cfs_b);
-			__start_cfs_bandwidth(cfs_b);
+			__start_cfs_bandwidth(cfs_b, false);
 		}
 
 		if (cfs_b->runtime > 0) {
@@ -1524,10 +1558,12 @@ static void expire_cfs_rq_runtime(struct cfs_rq *cfs_rq)
 	 * has not truly expired.
 	 *
 	 * Fortunately we can check determine whether this the case by checking
-	 * whether the global deadline has advanced.
+	 * whether the global deadline has advanced. It is valid to compare
+	 * cfs_b->runtime_expires without any locks since we only care about
+	 * exact equality, so a partial write will still work.
 	 */
 
-	if ((s64)(cfs_rq->runtime_expires - cfs_b->runtime_expires) >= 0) {
+	if (cfs_rq->runtime_expires != cfs_b->runtime_expires) {
 		/* extend local deadline, drift is bounded above by 2 ticks */
 		cfs_rq->runtime_expires += TICK_NSEC;
 	} else {
@@ -1662,7 +1698,16 @@ static void throttle_cfs_rq(struct cfs_rq *cfs_rq)
 	cfs_rq->throttled = 1;
 	cfs_rq->throttled_timestamp = rq->clock;
 	raw_spin_lock(&cfs_b->lock);
-	list_add_tail_rcu(&cfs_rq->throttled_list, &cfs_b->throttled_cfs_rq);
+	/*
+	 * Add to the _head_ of the list, so that an already-started
+	 * distribute_cfs_runtime will not see us
+	 */
+	list_add_rcu(&cfs_rq->throttled_list, &cfs_b->throttled_cfs_rq);
+#ifdef VENDOR_EDIT
+	list_del_rcu(&cfs_rq->unthrottled_list);
+#endif
+	if (!cfs_b->timer_active)
+		__start_cfs_bandwidth(cfs_b, false);
 	raw_spin_unlock(&cfs_b->lock);
 }
 
@@ -1680,6 +1725,9 @@ void unthrottle_cfs_rq(struct cfs_rq *cfs_rq)
 	raw_spin_lock(&cfs_b->lock);
 	cfs_b->throttled_time += rq->clock - cfs_rq->throttled_timestamp;
 	list_del_rcu(&cfs_rq->throttled_list);
+#ifdef VENDOR_EDIT
+	list_add_rcu(&cfs_rq->unthrottled_list, &cfs_b->unthrottled_cfs_rq);
+#endif
 	raw_spin_unlock(&cfs_b->lock);
 	cfs_rq->throttled_timestamp = 0;
 
@@ -1716,7 +1764,8 @@ static u64 distribute_cfs_runtime(struct cfs_bandwidth *cfs_b,
 		u64 remaining, u64 expires)
 {
 	struct cfs_rq *cfs_rq;
-	u64 runtime = remaining;
+	u64 runtime;
+	u64 starting_runtime = remaining;
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(cfs_rq, &cfs_b->throttled_cfs_rq,
@@ -1747,7 +1796,7 @@ next:
 	}
 	rcu_read_unlock();
 
-	return remaining;
+	return starting_runtime - remaining;
 }
 
 /*
@@ -1759,49 +1808,44 @@ next:
 static int do_sched_cfs_period_timer(struct cfs_bandwidth *cfs_b, int overrun)
 {
 	u64 runtime, runtime_expires;
-	int idle = 1, throttled;
+	int throttled;
 
-	raw_spin_lock(&cfs_b->lock);
 	/* no need to continue the timer with no bandwidth constraint */
 	if (cfs_b->quota == RUNTIME_INF)
-		goto out_unlock;
+		goto out_deactivate;
 
 	throttled = !list_empty(&cfs_b->throttled_cfs_rq);
-	/* idle depends on !throttled (for the case of a large deficit) */
-	idle = cfs_b->idle && !throttled;
 	cfs_b->nr_periods += overrun;
 
-	/* if we're going inactive then everything else can be deferred */
-	if (idle)
-		goto out_unlock;
+	/*
+	 * idle depends on !throttled (for the case of a large deficit), and if
+	 * we're going inactive then everything else can be deferred
+	 */
+	if (cfs_b->idle && !throttled)
+		goto out_deactivate;
 
 	__refill_cfs_bandwidth_runtime(cfs_b);
 
 	if (!throttled) {
 		/* mark as potentially idle for the upcoming period */
 		cfs_b->idle = 1;
-		goto out_unlock;
+		return 0;
 	}
 
 	/* account preceding periods in which throttling occurred */
 	cfs_b->nr_throttled += overrun;
 
-	/*
-	 * There are throttled entities so we must first use the new bandwidth
-	 * to unthrottle them before making it generally available.  This
-	 * ensures that all existing debts will be paid before a new cfs_rq is
-	 * allowed to run.
-	 */
-	runtime = cfs_b->runtime;
 	runtime_expires = cfs_b->runtime_expires;
-	cfs_b->runtime = 0;
 
 	/*
-	 * This check is repeated as we are holding onto the new bandwidth
-	 * while we unthrottle.  This can potentially race with an unthrottled
-	 * group trying to acquire new bandwidth from the global pool.
+	 * This check is repeated as we are holding onto the new bandwidth while
+	 * we unthrottle. This can potentially race with an unthrottled group
+	 * trying to acquire new bandwidth from the global pool. This can result
+	 * in us over-using our runtime if it is all used during this loop, but
+	 * only by limited amounts in that extreme case.
 	 */
-	while (throttled && runtime > 0) {
+	while (throttled && cfs_b->runtime > 0) {
+		runtime = cfs_b->runtime;
 		raw_spin_unlock(&cfs_b->lock);
 		/* we can't nest cfs_b->lock while distributing bandwidth */
 		runtime = distribute_cfs_runtime(cfs_b, runtime,
@@ -1809,10 +1853,10 @@ static int do_sched_cfs_period_timer(struct cfs_bandwidth *cfs_b, int overrun)
 		raw_spin_lock(&cfs_b->lock);
 
 		throttled = !list_empty(&cfs_b->throttled_cfs_rq);
+
+		cfs_b->runtime -= min(runtime, cfs_b->runtime);
 	}
 
-	/* return (any) remaining runtime */
-	cfs_b->runtime = runtime;
 	/*
 	 * While we are ensured activity in the period following an
 	 * unthrottle, this also covers the case in which the new bandwidth is
@@ -1820,12 +1864,12 @@ static int do_sched_cfs_period_timer(struct cfs_bandwidth *cfs_b, int overrun)
 	 * timer to remain active while there are any throttled entities.)
 	 */
 	cfs_b->idle = 0;
-out_unlock:
-	if (idle)
-		cfs_b->timer_active = 0;
-	raw_spin_unlock(&cfs_b->lock);
 
-	return idle;
+	return 0;
+
+out_deactivate:
+	cfs_b->timer_active = 0;
+	return 1;
 }
 
 /* a cfs_rq won't donate quota below this amount */
@@ -1915,10 +1959,9 @@ static void do_sched_cfs_slack_timer(struct cfs_bandwidth *cfs_b)
 		return;
 
 	raw_spin_lock(&cfs_b->lock);
-	if (cfs_b->quota != RUNTIME_INF && cfs_b->runtime > slice) {
+	if (cfs_b->quota != RUNTIME_INF && cfs_b->runtime > slice)
 		runtime = cfs_b->runtime;
-		cfs_b->runtime = 0;
-	}
+
 	expires = cfs_b->runtime_expires;
 	raw_spin_unlock(&cfs_b->lock);
 
@@ -1929,9 +1972,26 @@ static void do_sched_cfs_slack_timer(struct cfs_bandwidth *cfs_b)
 
 	raw_spin_lock(&cfs_b->lock);
 	if (expires == cfs_b->runtime_expires)
-		cfs_b->runtime = runtime;
+		cfs_b->runtime -= min(runtime, cfs_b->runtime);
 	raw_spin_unlock(&cfs_b->lock);
 }
+
+#ifdef VENDOR_EDIT
+static inline void enter_cfs_throttling(atomic_t *in_progress)
+{
+	atomic_inc(in_progress);
+}
+
+static inline void exit_cfs_throttling(atomic_t *in_progress)
+{
+	atomic_dec(in_progress);
+}
+
+static inline bool is_throttling_ongoing(atomic_t *in_progress)
+{
+	return atomic_read(in_progress) == 0 ? false:true;
+}
+#endif
 
 /*
  * When a group wakes up we want to make sure that its quota is not already
@@ -1940,40 +2000,75 @@ static void do_sched_cfs_slack_timer(struct cfs_bandwidth *cfs_b)
  */
 static void check_enqueue_throttle(struct cfs_rq *cfs_rq)
 {
+#ifdef VENDOR_EDIT
+	atomic_t *tip = &cfs_rq->throttling_in_progress;
+#endif
 	if (!cfs_bandwidth_used())
 		return;
 
+#ifdef VENDOR_EDIT
+	enter_cfs_throttling(tip);
+#endif
+
 	/* an active group must be handled by the update_curr()->put() path */
-	if (!cfs_rq->runtime_enabled || cfs_rq->curr)
+	if (!cfs_rq->runtime_enabled || cfs_rq->curr) {
+#ifdef VENDOR_EDIT
+		exit_cfs_throttling(tip);
+#endif
 		return;
+	}
 
 	/* ensure the group is not already throttled */
-	if (cfs_rq_throttled(cfs_rq))
+	if (cfs_rq_throttled(cfs_rq)) {
+#ifdef VENDOR_EDIT
+		exit_cfs_throttling(tip);
+#endif
 		return;
+	}
 
 	/* update runtime allocation */
 	account_cfs_rq_runtime(cfs_rq, 0);
 	if (cfs_rq->runtime_remaining <= 0)
 		throttle_cfs_rq(cfs_rq);
+#ifdef VENDOR_EDIT
+	exit_cfs_throttling(tip);
+#endif
 }
 
 /* conditionally throttle active cfs_rq's from put_prev_entity() */
 static void check_cfs_rq_runtime(struct cfs_rq *cfs_rq)
 {
+#ifdef VENDOR_EDIT
+	atomic_t *tip = &cfs_rq->throttling_in_progress;
+#endif
 	if (!cfs_bandwidth_used())
 		return;
 
-	if (likely(!cfs_rq->runtime_enabled || cfs_rq->runtime_remaining > 0))
+#ifdef VENDOR_EDIT
+	enter_cfs_throttling(tip);
+#endif
+	if (likely(!cfs_rq->runtime_enabled || cfs_rq->runtime_remaining > 0)) {
+#ifdef VENDOR_EDIT
+		exit_cfs_throttling(tip);
+#endif
 		return;
+	}
 
 	/*
 	 * it's possible for a throttled entity to be forced into a running
 	 * state (e.g. set_curr_task), in this case we're finished.
 	 */
-	if (cfs_rq_throttled(cfs_rq))
+	if (cfs_rq_throttled(cfs_rq)) {
+#ifdef VENDOR_EDIT
+		exit_cfs_throttling(tip);
+#endif
 		return;
+	}
 
 	throttle_cfs_rq(cfs_rq);
+#ifdef VENDOR_EDIT
+	exit_cfs_throttling(tip);
+#endif
 }
 
 static inline u64 default_cfs_period(void);
@@ -1997,6 +2092,7 @@ static enum hrtimer_restart sched_cfs_period_timer(struct hrtimer *timer)
 	int overrun;
 	int idle = 0;
 
+	raw_spin_lock(&cfs_b->lock);
 	for (;;) {
 		now = hrtimer_cb_get_time(timer);
 		overrun = hrtimer_forward(timer, now, cfs_b->period);
@@ -2006,6 +2102,7 @@ static enum hrtimer_restart sched_cfs_period_timer(struct hrtimer *timer)
 
 		idle = do_sched_cfs_period_timer(cfs_b, overrun);
 	}
+	raw_spin_unlock(&cfs_b->lock);
 
 	return idle ? HRTIMER_NORESTART : HRTIMER_RESTART;
 }
@@ -2018,6 +2115,9 @@ void init_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 	cfs_b->period = ns_to_ktime(default_cfs_period());
 
 	INIT_LIST_HEAD(&cfs_b->throttled_cfs_rq);
+#ifdef VENDOR_EDIT
+	INIT_LIST_HEAD(&cfs_b->unthrottled_cfs_rq);
+#endif
 	hrtimer_init(&cfs_b->period_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	cfs_b->period_timer.function = sched_cfs_period_timer;
 	hrtimer_init(&cfs_b->slack_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
@@ -2027,11 +2127,14 @@ void init_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 static void init_cfs_rq_runtime(struct cfs_rq *cfs_rq)
 {
 	cfs_rq->runtime_enabled = 0;
+#ifdef VENDOR_EDIT
+	INIT_LIST_HEAD(&cfs_rq->unthrottled_list);
+#endif
 	INIT_LIST_HEAD(&cfs_rq->throttled_list);
 }
 
 /* requires cfs_b->lock, may release to reprogram timer */
-void __start_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
+void __start_cfs_bandwidth(struct cfs_bandwidth *cfs_b, bool force)
 {
 	/*
 	 * The timer may be active because we're trying to set a new bandwidth
@@ -2046,7 +2149,7 @@ void __start_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 
 		raw_spin_lock(&cfs_b->lock);
 		/* if someone else restarted the timer then we're done */
-		if (cfs_b->timer_active)
+		if (!force && cfs_b->timer_active)
 			return;
 	}
 
@@ -2060,13 +2163,53 @@ static void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b)
 	hrtimer_cancel(&cfs_b->slack_timer);
 }
 
+#ifdef VENDOR_EDIT
+static inline struct task_group *next_task_group(struct task_group *tg)
+{
+	tg = list_entry_rcu(tg->list.next, typeof(struct task_group), list);
+
+	return (&tg->list == &task_groups) ? NULL : tg;
+}
+
+/* Iterate over all cfs_rq in a cpu */
+#define for_each_cfs_rq(cfs_rq, tg, cpu)    \
+	for (tg = container_of(&task_groups, struct task_group, list); \
+		((tg = next_task_group(tg)) && (cfs_rq = tg->cfs_rq[cpu]));)
+#endif
+
+static void __maybe_unused update_runtime_enabled(struct rq *rq)
+{
+	struct cfs_rq *cfs_rq;
+#ifdef VENDOR_EDIT
+	struct task_group *tg;
+
+	rcu_read_lock();
+	for_each_cfs_rq(cfs_rq, tg, cpu_of(rq)) {
+#else
+	for_each_leaf_cfs_rq(rq, cfs_rq) {
+#endif
+		struct cfs_bandwidth *cfs_b = &cfs_rq->tg->cfs_bandwidth;
+
+		raw_spin_lock(&cfs_b->lock);
+		cfs_rq->runtime_enabled = cfs_b->quota != RUNTIME_INF;
+		raw_spin_unlock(&cfs_b->lock);
+	}
+#ifdef VENDOR_EDIT
+	rcu_read_unlock();
+#endif
+}
+
 static void unthrottle_offline_cfs_rqs(struct rq *rq)
 {
 	struct cfs_rq *cfs_rq;
+#ifdef VENDOR_EDIT
+	struct task_group *tg;
 
+	rcu_read_lock();
+	for_each_cfs_rq(cfs_rq, tg, cpu_of(rq)) {
+#else
 	for_each_leaf_cfs_rq(rq, cfs_rq) {
-		struct cfs_bandwidth *cfs_b = tg_cfs_bandwidth(cfs_rq->tg);
-
+#endif
 		if (!cfs_rq->runtime_enabled)
 			continue;
 
@@ -2074,10 +2217,23 @@ static void unthrottle_offline_cfs_rqs(struct rq *rq)
 		 * clock_task is not advancing so we just need to make sure
 		 * there's some valid quota amount
 		 */
-		cfs_rq->runtime_remaining = cfs_b->quota;
+		cfs_rq->runtime_remaining = 1;
+		/*
+		 * Offline rq is schedulable till cpu is completely disabled
+		 * in take_cpu_down(), so we prevent new cfs throttling here.
+		 */
+		cfs_rq->runtime_enabled = 0;
+#ifdef VENDOR_EDIT
+		while (is_throttling_ongoing(&cfs_rq->throttling_in_progress))
+			;
+#endif
+
 		if (cfs_rq_throttled(cfs_rq))
 			unthrottle_cfs_rq(cfs_rq);
 	}
+#ifdef VENDOR_EDIT
+	rcu_read_unlock();
+#endif
 }
 
 #else /* CONFIG_CFS_BANDWIDTH */
@@ -2114,6 +2270,7 @@ static inline struct cfs_bandwidth *tg_cfs_bandwidth(struct task_group *tg)
 	return NULL;
 }
 static inline void destroy_cfs_bandwidth(struct cfs_bandwidth *cfs_b) {}
+static inline void update_runtime_enabled(struct rq *rq) {}
 static inline void unthrottle_offline_cfs_rqs(struct rq *rq) {}
 
 #endif /* CONFIG_CFS_BANDWIDTH */
@@ -3205,7 +3362,12 @@ int can_migrate_task(struct task_struct *p, struct lb_env *env)
  *
  * Called with both runqueues locked.
  */
+ #ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+static int move_one_task(struct lb_env *env, int *move_game)
+#else
 static int move_one_task(struct lb_env *env)
+#endif
 {
 	struct task_struct *p, *n;
 
@@ -3216,6 +3378,11 @@ static int move_one_task(struct lb_env *env)
 		if (!can_migrate_task(p, env))
 			continue;
 
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+        if(p->game_flag == PROCESS_RENDER_THREAD)
+            *move_game = 1;
+#endif
 		move_task(p, env);
 		/*
 		 * Right now, this is only the second place move_task()
@@ -3239,7 +3406,12 @@ static const unsigned int sched_nr_migrate_break = 32;
  *
  * Called with both runqueues locked.
  */
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+static int move_tasks(struct lb_env *env , int *move_game)
+#else
 static int move_tasks(struct lb_env *env)
+#endif
 {
 	struct list_head *tasks = &env->src_rq->cfs_tasks;
 	struct task_struct *p;
@@ -3278,6 +3450,11 @@ static int move_tasks(struct lb_env *env)
 		if (!can_migrate_task(p, env))
 			goto next;
 
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+        if(p->game_flag == PROCESS_RENDER_THREAD)
+            *move_game = 1;
+#endif
 		move_task(p, env);
 		pulled++;
 		env->load_move -= load;
@@ -4425,6 +4602,11 @@ static int load_balance(int this_cpu, struct rq *this_rq,
 	struct rq *busiest = NULL;
 	unsigned long flags;
 	struct cpumask *cpus = __get_cpu_var(load_balance_tmpmask);
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+    int game_flag = 0;
+    int game_probe = 0;
+#endif
 
 	struct lb_env env = {
 		.sd		= sd,
@@ -4479,7 +4661,13 @@ more_balance:
 		double_rq_lock(this_rq, busiest);
 		if (!env.loop)
 			update_h_load(env.src_cpu);
-		ld_moved += move_tasks(&env);
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+        ld_moved += move_tasks(&env, &game_probe);
+        game_flag |= game_probe;
+#else
+        ld_moved += move_tasks(&env);
+#endif
 		double_rq_unlock(this_rq, busiest);
 		local_irq_restore(flags);
 
@@ -4556,9 +4744,24 @@ more_balance:
 		sd->nr_balance_failed = 0;
 		if (per_cpu(dbs_boost_needed, this_cpu)) {
 			per_cpu(dbs_boost_needed, this_cpu) = false;
-			atomic_notifier_call_chain(&migration_notifier_head,
-						   this_cpu,
-						   (void *)cpu_of(busiest));
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power 
+            if(boost_game_only) {
+                if(game_flag){
+                    atomic_notifier_call_chain(&migration_notifier_head,
+                                   this_cpu,
+                                   (void *)cpu_of(busiest));
+                }
+            }
+            else
+                atomic_notifier_call_chain(&migration_notifier_head,
+                               this_cpu,
+                               (void *)cpu_of(busiest));
+#else
+            atomic_notifier_call_chain(&migration_notifier_head,
+                           this_cpu,
+                           (void *)cpu_of(busiest));
+#endif
 		}
 	}
 	if (likely(!active_balance)) {
@@ -4668,6 +4871,12 @@ static int active_load_balance_cpu_stop(void *data)
 	struct rq *target_rq = cpu_rq(target_cpu);
 	struct sched_domain *sd;
 
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+    int game_flag = 0;
+    int game_probe = 0;
+#endif
+
 	raw_spin_lock_irq(&busiest_rq->lock);
 
 	/* make sure the requested cpu hasn't gone down in the meantime */
@@ -4709,11 +4918,20 @@ static int active_load_balance_cpu_stop(void *data)
 
 		schedstat_inc(sd, alb_count);
 
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+        if (move_one_task(&env, &game_probe))
+#else
 		if (move_one_task(&env))
+#endif
 			schedstat_inc(sd, alb_pushed);
 		else
 			schedstat_inc(sd, alb_failed);
 	}
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+    game_flag |= game_probe;
+#endif
 	rcu_read_unlock();
 	double_unlock_balance(busiest_rq, target_rq);
 out_unlock:
@@ -4721,9 +4939,24 @@ out_unlock:
 	raw_spin_unlock_irq(&busiest_rq->lock);
 	if (per_cpu(dbs_boost_needed, target_cpu)) {
 		per_cpu(dbs_boost_needed, target_cpu) = false;
+#ifdef VENDOR_EDIT
+//add by huruihuan for tradeoff performence and power
+    if(boost_game_only) {
+        if(game_flag) 
+            atomic_notifier_call_chain(&migration_notifier_head,
+                           target_cpu,
+                           (void *)cpu_of(busiest_rq));
+    }
+    else
+        atomic_notifier_call_chain(&migration_notifier_head,
+                       target_cpu,
+                       (void *)cpu_of(busiest_rq));
+
+#else
 		atomic_notifier_call_chain(&migration_notifier_head,
 					   target_cpu,
 					   (void *)cpu_of(busiest_rq));
+#endif
 	}
 	return 0;
 }
@@ -5185,6 +5418,8 @@ void trigger_load_balance(struct rq *rq, int cpu)
 static void rq_online_fair(struct rq *rq)
 {
 	update_sysctl();
+
+	update_runtime_enabled(rq);
 }
 
 static void rq_offline_fair(struct rq *rq)
